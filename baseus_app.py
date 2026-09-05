@@ -229,41 +229,45 @@ class USBReader(QThread):
                 except OSError: continue
                 if not data: continue
                 
-                if data[0] == 0x0A:
-                    self.battery_update.emit(f"🔋 Bateria: {data[3]}%")
-                    comando = data[5]
-                    
-                    if comando in [0x71, 0x72, 0x73]:
-                        active_tool = "LASER"; curr = time.time()
-                        if curr - last_click_time < 0.4:
-                            self.toggle_mode.emit(); self.pointer_active.emit(True)
-                            last_click_time = 0; just_toggled = True; press_time = curr
-                        else: last_click_time = curr; press_time = curr; just_toggled = False
-                        last_gyro_time = time.time()
-                        if not is_drawing: self.pointer_active.emit(True); is_drawing = True
-                    elif comando in [0x6a, 0x6c]: self.pen_clear.emit() 
-                    elif comando == 0x6d: self.black_screen_toggle.emit()
-                    elif comando == 0x68:
-                        active_tool = "PEN"; last_gyro_time = time.time()
-                        if not is_pen_drawing: self.pen_active.emit(True); is_pen_drawing = True
-                    elif comando in [0x67, 0x69]: self.pen_clear.emit()
-                    
-                    elif comando in [0x75, 0x76, 0x77]:
-                        now = time.time()
-                        if now - last_rec_toggle > DEBOUNCE:
-                            is_recording = not is_recording; last_rec_toggle = now; self.record_toggled.emit(is_recording)
-                            
-                    elif comando in [0x7a, 0x7c, 0x7d]:
-                        now = time.time()
-                        if now - last_translate_toggle > DEBOUNCE:
-                            is_translating = not is_translating; last_translate_toggle = now; self.translate_toggled.emit(is_translating)
-                            
-                elif data[0] == 0x02:
-                    if active_tool in ["LASER", "PEN"]: last_gyro_time = time.time()
-                    if active_tool == "LASER" and not is_drawing and last_click_time > 0:
-                        self.pointer_active.emit(True); is_drawing = True
-                    elif active_tool == "PEN" and not is_pen_drawing:
-                        self.pen_active.emit(True); is_pen_drawing = True
+                try:
+                    if data[0] == 0x0A:
+                        self.battery_update.emit(f"🔋 Bateria: {data[3]}%")
+                        comando = data[5]
+                        
+                        if comando in [0x71, 0x72, 0x73]:
+                            active_tool = "LASER"; curr = time.time()
+                            if curr - last_click_time < 0.4:
+                                self.toggle_mode.emit(); self.pointer_active.emit(True)
+                                last_click_time = 0; just_toggled = True; press_time = curr
+                            else: last_click_time = curr; press_time = curr; just_toggled = False
+                            last_gyro_time = time.time()
+                            if not is_drawing: self.pointer_active.emit(True); is_drawing = True
+                        elif comando in [0x6a, 0x6c]: self.pen_clear.emit() 
+                        elif comando == 0x6d: self.black_screen_toggle.emit()
+                        elif comando == 0x68:
+                            active_tool = "PEN"; last_gyro_time = time.time()
+                            if not is_pen_drawing: self.pen_active.emit(True); is_pen_drawing = True
+                        elif comando in [0x67, 0x69]: self.pen_clear.emit()
+                        
+                        elif comando in [0x75, 0x76, 0x77]:
+                            now = time.time()
+                            if now - last_rec_toggle > DEBOUNCE:
+                                is_recording = not is_recording; last_rec_toggle = now; self.record_toggled.emit(is_recording)
+                                
+                        elif comando in [0x7a, 0x7c, 0x7d]:
+                            now = time.time()
+                            if now - last_translate_toggle > DEBOUNCE:
+                                is_translating = not is_translating; last_translate_toggle = now; self.translate_toggled.emit(is_translating)
+                                
+                    elif data[0] == 0x02:
+                        if active_tool in ["LASER", "PEN"]: last_gyro_time = time.time()
+                        if active_tool == "LASER" and not is_drawing and last_click_time > 0:
+                            self.pointer_active.emit(True); is_drawing = True
+                        elif active_tool == "PEN" and not is_pen_drawing:
+                            self.pen_active.emit(True); is_pen_drawing = True
+                except IndexError:
+                    print(f"⚠️ Pacote USB ignorado (formato desconhecido/curto): {data.hex()}")
+                    continue
 
             if time.time() - last_gyro_time > 0.3:
                 if is_drawing:
@@ -701,7 +705,6 @@ if __name__ == '__main__':
     reader.translate_toggled.connect(pointer_window.set_translating)
     
     def sync_audio_state():
-        # Se tentou ligar, mas o modelo não está carregado
         if (pointer_window.is_recording or pointer_window.is_translating) and not audio_thread.model_loaded:
             pointer_window.set_final_subtitle("⚠️ ERRO: Modelo de Voz não configurado nas Configurações!")
             pointer_window.set_recording(False)
@@ -709,6 +712,9 @@ if __name__ == '__main__':
             return
             
         audio_thread.is_listening = pointer_window.is_recording or pointer_window.is_translating
+
+    reader.record_toggled.connect(lambda _: sync_audio_state())
+    reader.translate_toggled.connect(lambda _: sync_audio_state())
     
     def handle_partial(text):
         if pointer_window.is_translating: pointer_window.set_partial_subtitle(text)

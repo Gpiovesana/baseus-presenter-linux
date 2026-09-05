@@ -20,27 +20,42 @@ Um software open-source não-oficial que desbloqueia e expande todas as funciona
   * **Lupa (Magnifier):** Amplie áreas específicas da tela (formato circular ou retangular).
   * **Spotlight:** Escureça a tela e destaque apenas a área em volta do cursor.
   * **Caneta Digital (Pincel):** Desenhe livremente sobre qualquer aplicativo ou apresentação.
-* **Inteligência Artificial & Áudio (100% Offline):**
+* **IA & Áudio com Processamento 100% Local (após o download inicial dos modelos):**
   * **Transcrição Push-to-Talk:** Segure ou clique no botão de microfone para transcrever sua fala para texto.
   * **Diário de Bordo:** Salva tudo o que foi falado durante a aula/palestra em um arquivo `.txt`.
   * **Tradução Simultânea:** Legendas automáticas na tela em um segundo idioma (ex: você fala em Português e a legenda aparece em Inglês).
 * **Segurança e Estabilidade:**
-  * Regras automáticas de `udev` rodando em *user space* (não requer root após a instalação).
+  * O aplicativo roda em user space sem exigir privilégios de root, graças às regras udev configuradas na instalação.
   * Prevenção contra múltiplas instâncias e salvamento atômico de configurações.
 
-## 📥 Instalação Rápida (Recomendado)
+## 📥 Instalação
 
-Abra o seu terminal no Linux (testado em Ubuntu, Zorin OS e Linux Mint) e cole o comando abaixo. Ele fará o download das dependências, criará as regras de segurança no Kernel e instalará o aplicativo na sua pasta Home.
+**Opção 1: Instalação Rápida (1 linha):**
+
+Abra o terminal e cole o comando abaixo. Ele fará o download das dependências, criará um ambiente virtual isolado (`venv`) e instalará o aplicativo na sua pasta Home.
 
 ```bash
-wget -qO- [https://raw.githubusercontent.com/Gpiovesana/baseus-presenter-linux/main/install.sh](https://raw.githubusercontent.com/Gpiovesana/baseus-presenter-linux/main/install.sh) | bash 
+wget -qO- https://raw.githubusercontent.com/Gpiovesana/baseus-presenter-linux/main/install.sh | bash
 ```
 
+**Opção 2: Instalação Manual/Auditável (Para usuários avançados):**
 
-(Certifique-se de reiniciar o computador após a instalação para que o sistema aplique as novas permissões do grupo de segurança).
+Baixe o script de instalação
+```bash
+wget https://raw.githubusercontent.com/Gpiovesana/baseus-presenter-linux/main/install.sh
+
+# Inspecione o código, se desejar
+cat install.sh
+# Execute o instalador
+bash install.sh
+```
+(Independente do método, reinicie o computador após a instalação para aplicar as permissões do grupo de segurança).
+
 
 ## ⚙️ Como usar
-* Inicie o programa: Você pode iniciá-lo pelo terminal rodando python3 ~/BaseusPresenter/baseus_app.py (ou adicioná-lo aos aplicativos de inicialização do seu sistema).
+* Inicie o programa: Você pode iniciá-lo pelo terminal rodando `~/BaseusPresenter/.venv/bin/python3 ~/BaseusPresenter/baseus_app.py`.
+
+  (Certifique-se de reiniciar o computador após a instalação para que o sistema aplique as novas permissões do grupo de segurança).
 
 * Ícone na Bandeja: Um ícone vermelho aparecerá perto do relógio do sistema. Clique com o botão direito para abrir as Configurações.
 
@@ -85,6 +100,7 @@ Sugestões, issues e pull requests são muito bem-vindos! Sinta-se à vontade pa
 
 # 🇺🇸 English
 # Baseus Presenter for Linux 🚀
+
 An unofficial open-source software that unlocks and expands all features of the Baseus Orange Dot AI slide presenter on Linux. Built with PyQt5, this project transforms your presenter into a complete tool for teachers, speakers, and content creators, bringing visual tools, offline voice transcription, and real-time simultaneous translation.
 
 > ⚠️ **Disclaimer:** This is an independent open-source project. It has no affiliation, endorsement, sponsorship, or commercial tie with the Baseus brand.
@@ -100,7 +116,7 @@ An unofficial open-source software that unlocks and expands all features of the 
 
   * Digital Pen (Brush): Draw freely over any application or presentation.
 
-  * Artificial Intelligence & Audio (100% Offline):
+* Artificial Intelligence & Audio with 100% Local Processing (after the initial model download):
 
   * Push-to-Talk Transcription: Click the microphone button to transcribe your speech to text.
 
@@ -108,22 +124,40 @@ An unofficial open-source software that unlocks and expands all features of the 
 
   * Simultaneous Translation: Automatic on-screen subtitles in a second language (e.g., you speak in Portuguese and subtitles appear in English).
 
-  * Security and Stability:
+* Security and Stability:
 
-  * Automatic udev rules running in user space (does not require root after installation).
+  * The application runs in user space without requiring root privileges, thanks to the udev rules configured during installation.
 
   * Prevention against multiple instances and atomic saving of configurations.
 
-## 📥 Quick Install (Recommended)
-Open your Linux terminal (tested on Ubuntu, Zorin OS, and Linux Mint) and paste the command below. It will download dependencies, create security rules in the Kernel, and install the application in your Home folder.
 
-```Bash
-wget -qO- [https://raw.githubusercontent.com/Gpiovesana/baseus-presenter-linux/main/install.sh](https://raw.githubusercontent.com/Gpiovesana/baseus-presenter-linux/main/install.sh) | bash
+
+## 📥 Installation
+
+**Option 1: Quick Install (1 line)**
+Open the terminal and paste the command below. It will download dependencies, create an isolated virtual environment (`venv`), and install the application in your Home folder.
+
+```bash
+wget -qO- https://raw.githubusercontent.com/Gpiovesana/baseus-presenter-linux/main/install.sh | bash
 ```
-(Make sure to restart your computer after installation so the system applies the new security group permissions).
 
-## ⚙️ How to Use
-* Start the program: You can start it via terminal by running python3 ~/BaseusPresenter/baseus_app.py (or add it to your system's startup applications).
+**Option 2: Manual/Auditable Install (For advanced users)**
+
+```bash
+# Download the installation script
+wget https://raw.githubusercontent.com/Gpiovesana/baseus-presenter-linux/main/install.sh
+
+# Inspect the code, if you wish
+cat install.sh
+
+# Run the installer
+bash install.sh
+```
+
+(Regardless of the method, restart your computer after installation to apply the security group permissions).
+
+## ⚙️ How to use
+* Start the program: You can start it via terminal by running ~/BaseusPresenter/.venv/bin/python3 ~/BaseusPresenter/baseus_app.py.
 
 * System Tray Icon: A red icon will appear near the system clock. Right-click it to open Settings.
 
@@ -134,7 +168,7 @@ wget -qO- [https://raw.githubusercontent.com/Gpiovesana/baseus-presenter-linux/m
   * Download a language model from the official [Vosk Models](https://alphacephei.com/vosk/models) website.
 
   * Extract the folder, go to the Audio and Language tab in the application, click + Add folder..., and point to the downloaded model.
-
+  
 ## 🎮 Presenter Controls
 * Hardware buttons were mapped via reverse engineering to operate the system:
 

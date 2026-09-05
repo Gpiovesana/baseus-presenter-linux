@@ -2,7 +2,12 @@
   <a href="#-português">🇧🇷 Português</a> | <a href="#-english">🇺🇸 English</a>
 
 
+
 ---
+<p align="center">
+  <img width="75%" alt="resultado" src="https://github.com/user-attachments/assets/996376a3-89ca-4d0b-8522-d04eb2d23d85"/>
+</p>
+
 
 # 🇧🇷 Português
 

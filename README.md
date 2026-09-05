@@ -9,7 +9,7 @@
 
 # Baseus Presenter para Linux 🚀
 
-Um software open-source não-oficial que desbloqueia e expande todas as funcionalidades do passador de slides Baseus no Linux. Construído com PyQt5, este projeto transforma seu passador em uma ferramenta completa para professores, palestrantes e criadores de conteúdo, trazendo ferramentas visuais, transcrição de voz offline e tradução simultânea em tempo real.
+Um software open-source não-oficial que desbloqueia e expande todas as funcionalidades do passador de slides Baseus Orange Dot AI no Linux. Construído com PyQt5, este projeto transforma seu passador em uma ferramenta completa para professores, palestrantes e criadores de conteúdo, trazendo ferramentas visuais, transcrição de voz offline e tradução simultânea em tempo real.
 
 > ⚠️ **Aviso Legal:** Este é um projeto de código aberto independente. Não possui nenhuma afiliação, endosso, patrocínio ou vínculo comercial com a marca Baseus.
 
@@ -85,7 +85,7 @@ Sugestões, issues e pull requests são muito bem-vindos! Sinta-se à vontade pa
 
 # 🇺🇸 English
 # Baseus Presenter for Linux 🚀
-An unofficial open-source software that unlocks and expands all features of the Baseus slide presenter on Linux. Built with PyQt5, this project transforms your presenter into a complete tool for teachers, speakers, and content creators, bringing visual tools, offline voice transcription, and real-time simultaneous translation.
+An unofficial open-source software that unlocks and expands all features of the Baseus Orange Dot AI slide presenter on Linux. Built with PyQt5, this project transforms your presenter into a complete tool for teachers, speakers, and content creators, bringing visual tools, offline voice transcription, and real-time simultaneous translation.
 
 > ⚠️ **Disclaimer:** This is an independent open-source project. It has no affiliation, endorsement, sponsorship, or commercial tie with the Baseus brand.
 

@@ -1,6 +1,18 @@
 #!/bin/bash
+set -euo pipefail
 
 echo "🚀 Iniciando a instalação do Baseus Presenter..."
+
+if [[ "$EUID" -eq 0 ]]; then
+    echo "❌ ERRO: Não execute este instalador como root (sudo)."
+    echo "O script pedirá a senha do sudo automaticamente quando for necessário."
+    exit 1
+fi
+
+if ! command -v apt >/dev/null; then
+    echo "❌ ERRO: Este instalador requer uma distribuição baseada em Debian/Ubuntu (Zorin, Mint, etc)."
+    exit 1
+fi
 
 echo "📦 1/4 Instalando dependências do sistema..."
 sudo apt update
@@ -17,15 +29,13 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 
 echo "📥 3/4 Baixando o aplicativo do GitHub..."
 mkdir -p ~/BaseusPresenter
-# ATENÇÃO: Verifique se a URL abaixo é a do SEU repositório!
+# Lembre-se de verificar se a URL abaixo é a do SEU repositório!
 wget -qO ~/BaseusPresenter/baseus_app.py https://raw.githubusercontent.com/Gpiovesana/baseus-presenter-linux/main/baseus_app.py
 chmod +x ~/BaseusPresenter/baseus_app.py
 
 echo "🐍 4/4 Criando ambiente virtual seguro (venv) e instalando IA..."
 python3 -m venv ~/BaseusPresenter/.venv
-# Usamos o pip de dentro do ambiente virtual, sem sujar o sistema!
 ~/BaseusPresenter/.venv/bin/pip install vosk sounddevice pynput argostranslate
 
 echo "✅ INSTALAÇÃO CONCLUÍDA!"
-echo "⚠️ ATENÇÃO: Como alteramos suas permissões de segurança no Linux,"
-echo "você precisa REINICIAR O COMPUTADOR agora para o sistema reconhecer o passador!"
+echo "⚠️ ATENÇÃO: Reinicie o computador agora para que o sistema reconheça o passador!"

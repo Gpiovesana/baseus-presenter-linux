@@ -286,15 +286,27 @@ class PointerWindow(QWidget):
         self.config = config
         self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.WindowTransparentForInput | Qt.X11BypassWindowManagerHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setGeometry(0, 0, QApplication.primaryScreen().size().width(), QApplication.primaryScreen().size().height())
+        self.current_screen = QApplication.screenAt(self.cursor().pos())
+        if not self.current_screen: self.current_screen = QApplication.primaryScreen()
+        self.setGeometry(self.current_screen.geometry())
         self.modes = ["LASER", "LUPA", "SPOTLIGHT", "MOUSE PURO"]; self.mode_index = 0
         self.is_drawing = False; self.is_pen_drawing = False; self.is_black_screen = False 
         self.is_recording = False; self.is_translating = False; self.blink_state = True
         self.caption_text = ""; self.is_caption_final = True; self.pen_points = []; self.mouse_sim = Controller()
-        self.timer = QTimer(); self.timer.timeout.connect(self.update)
+        self.timer = QTimer(); self.timer.timeout.connect(self._update_overlay)
         self.blink_timer = QTimer(); self.blink_timer.timeout.connect(self.toggle_blink)
         self.subtitle_timer = QTimer(); self.subtitle_timer.timeout.connect(self.clear_subtitle)
-
+    def _update_overlay(self):
+        # Descobre onde o mouse está agora
+        screen = QApplication.screenAt(self.cursor().pos())
+        if screen and screen != self.current_screen:
+            # Se mudou de monitor, teletransporta a janela para a nova tela!
+            self.current_screen = screen
+            self.setGeometry(screen.geometry())
+            # Se estiver com a Lupa ligada, precisa refazer a "foto" do fundo na tela nova
+            if hasattr(self, 'screen_pixmap') and self.is_drawing and self.modes[self.mode_index] == "LUPA":
+                self.screen_pixmap = screen.grabWindow(0)
+        self.update()
     def toggle_blink(self): self.blink_state = not self.blink_state; self.update()
     def set_partial_subtitle(self, text):
         if self.is_translating: self.caption_text = text; self.is_caption_final = False; self.subtitle_timer.stop(); self._check_timer()
@@ -314,7 +326,7 @@ class PointerWindow(QWidget):
     def toggle_black_screen(self): self.is_black_screen = not self.is_black_screen; self._check_timer(); self.update()
     def set_active(self, active):
         self.is_drawing = active; self._check_timer()
-        if active and self.modes[self.mode_index] == "LUPA": self.screen_pixmap = QApplication.primaryScreen().grabWindow(0); self.show()
+        if active and self.modes[self.mode_index] == "LUPA": self.screen_pixmap = self.current_screen.grabWindow(0); self.show()
     def set_pen_active(self, active):
         self.is_pen_drawing = active; self._check_timer()
         if not active and self.pen_points and self.pen_points[-1] is not None: self.pen_points.append(None) 
@@ -326,7 +338,7 @@ class PointerWindow(QWidget):
         else: self.hide(); self.timer.stop(); self.update()
     def switch_mode(self):
         self.mode_index = (self.mode_index + 1) % len(self.modes)
-        if self.is_drawing and self.modes[self.mode_index] == "LUPA": self.hide(); self.screen_pixmap = QApplication.primaryScreen().grabWindow(0); self.show()
+        if self.is_drawing and self.modes[self.mode_index] == "LUPA": self.hide(); self.screen_pixmap = self.current_screen.grabWindow(0); self.show()
         if self.is_drawing: self.update()
     def do_click(self):
         if self.modes[self.mode_index] == "MOUSE PURO": self.mouse_sim.click(Button.left)
@@ -335,7 +347,7 @@ class PointerWindow(QWidget):
         painter = QPainter(self)
         if self.is_black_screen: painter.fillRect(self.rect(), Qt.black)
         painter.setRenderHint(QPainter.Antialiasing)
-        pos = self.cursor().pos()
+        pos = self.mapFromGlobal(self.cursor().pos())
         v = self.config["visual"]
         c_pincel = QColor(v["pincel_color"]); c_laser = QColor(v["laser_color"])
 

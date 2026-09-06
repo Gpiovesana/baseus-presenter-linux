@@ -68,7 +68,11 @@ class PointerWindow(QMainWindow):
 
     def set_pen_active(self, active):
         self.is_pen_drawing = active
-        if not active: self.last_pen_pos = None
+        if not active: 
+            self.last_pen_pos = None
+            # Aqui está o segredo: Manda a caneta se levantar da folha!
+            if not self.pen_path.isEmpty():
+                self.pen_path.moveTo(self.cursor().pos())
 
     def pen_clear(self):
         self.pen_path = QPainterPath()

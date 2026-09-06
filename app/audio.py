@@ -54,7 +54,7 @@ class AudioThread(QThread):
         self.model = None
         self.recognizer = None
         self.q = queue.Queue()
-        self._needs_reload = True # Flag que manda carregar o modelo sem travar a tela
+        self._needs_reload = True 
         self.txt_path = None
 
     def set_recording(self, state):
@@ -70,7 +70,12 @@ class AudioThread(QThread):
             self.txt_path = os.path.join(pasta, nome_arquivo)
             with open(self.txt_path, 'w', encoding='utf-8') as f:
                 f.write(f"--- Transcrição Iniciada: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')} ---\n\n")
-            self.audio_warning.emit("🎙️ Gravação Iniciada!")
+            
+            # Avisa se está silencioso ou com legenda
+            if self.config.get("show_subtitles", True):
+                self.audio_warning.emit("🎙️ Gravação Iniciada (Com Legendas)!")
+            else:
+                self.audio_warning.emit("🎙️ Gravação Silenciosa Iniciada (Salvando no TXT)!")
         else:
             self.audio_warning.emit("⏸️ Gravação Pausada.")
             self.txt_path = None
@@ -85,7 +90,6 @@ class AudioThread(QThread):
             self.audio_warning.emit("🌐 Tradução Simultânea OFF.")
 
     def trigger_reload(self):
-        """Chamado pela interface. Agenda a recarga do modelo na thread de áudio."""
         self._needs_reload = True
 
     def _load_model(self):
@@ -105,14 +109,13 @@ class AudioThread(QThread):
             self.model, self.recognizer = None, None
 
     def _audio_callback(self, indata, frames, time, status):
-        if self.is_recording:
+        # AQUI FOI CORRIGIDO: O microfone abre se for para Gravar OU Traduzir
+        if self.is_recording or self.is_translating:
             self.q.put(bytes(indata))
 
     def _get_device_id(self):
         saved = self.config["audio"].get("input_device")
         if saved is not None: return saved
-        
-        # A Mágica do Claude: Busca o Baseus automaticamente se nada foi salvo!
         for idx, dev in enumerate(sd.query_devices()):
             if dev['max_input_channels'] > 0 and 'baseus' in dev['name'].lower():
                 return idx
@@ -126,28 +129,32 @@ class AudioThread(QThread):
             with sd.RawInputStream(samplerate=16000, blocksize=4000, device=device_id, 
                                    dtype='int16', channels=1, callback=self._audio_callback):
                 while self.running:
-                    # Carrega modelo sem travar a interface gráfica
                     if self._needs_reload:
                         self._load_model()
                         self._needs_reload = False
 
                     if not self.q.empty():
                         data = self.q.get()
-                        if self.recognizer and self.is_recording:
+                        if self.recognizer and (self.is_recording or self.is_translating):
                             if self.recognizer.AcceptWaveform(data):
                                 res = json.loads(self.recognizer.Result())
                                 text = res.get('text', '')
                                 if text:
                                     final_text = self._translate_if_needed(text)
-                                    self.final_ready.emit(final_text)
-                                    if self.txt_path:
+                                    
+                                    # LÓGICA DE EXIBIÇÃO INTELIGENTE
+                                    if self.config.get("show_subtitles", True) or self.is_translating:
+                                        self.final_ready.emit(final_text)
+                                        
+                                    if self.txt_path and self.is_recording:
                                         with open(self.txt_path, 'a', encoding='utf-8') as f:
                                             f.write(final_text + "\n")
                             else:
                                 res = json.loads(self.recognizer.PartialResult())
                                 text = res.get('partial', '')
                                 if text:
-                                    self.partial_ready.emit(self._translate_if_needed(text))
+                                    if self.config.get("show_subtitles", True) or self.is_translating:
+                                        self.partial_ready.emit(self._translate_if_needed(text))
                     else:
                         self.msleep(10)
         except Exception as e:
@@ -159,7 +166,6 @@ class AudioThread(QThread):
             try: 
                 return argostranslate.translate.translate(text, "pt", target_lang)
             except Exception as e: 
-                # O Erro não fica mais oculto (Ideia do ChatGPT)
                 self.audio_warning.emit(f"⚠️ Erro de Tradução: Pacote pt->{target_lang} ausente!")
                 log.warning(f"Erro Argos: {e}")
                 return text

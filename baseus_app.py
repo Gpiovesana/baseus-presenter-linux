@@ -66,7 +66,10 @@ def main():
     # Interface Gráfica conversando com Visor e Áudio 
     settings_gui.config_updated.connect(overlay.update)
     settings_gui.model_changed.connect(audio.trigger_reload)
-
+    
+    # Passa a bateria para a Janela e para a Bandeja do Sistema (Ícone)
+    hardware.battery_update.connect(settings_gui.update_battery)
+    hardware.battery_update.connect(lambda msg: tray.setToolTip(f"Baseus Presenter - {msg}"))
     # =========================================================================
 
     # 5. Dando a partida nos motores!

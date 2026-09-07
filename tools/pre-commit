@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Hook de pre-commit do Baseus Presenter.
+#
+# Instale com:
+#   ln -sf ../../tools/pre-commit .git/hooks/pre-commit
+#
+# Roda a checagem de fiação de sinais Qt e a suíte de testes. Ambas são
+# rápidas (<1s) e não exigem hardware nem servidor de áudio.
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# Usa o venv do projeto se existir; senão cai no python3 do sistema.
+if [[ -x ".venv/bin/python" ]]; then
+    PY=".venv/bin/python"
+else
+    PY="python3"
+fi
+
+echo "→ Verificando fiação dos sinais Qt..."
+"$PY" tools/check_signals.py
+
+echo "→ Rodando testes..."
+# offscreen: os testes de gui.py criam QMainWindow real (MainWindow) e não
+# podem exigir um display X11/Wayland disponível no ambiente de CI/commit.
+QT_QPA_PLATFORM=offscreen "$PY" -m unittest discover -s tests -q
+
+echo "✅ Pre-commit OK"

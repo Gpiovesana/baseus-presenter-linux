@@ -39,6 +39,7 @@ class FileAnalyzer(ast.NodeVisitor):
         self.connections = []        # (classe_resolvida_ou_None, sinal, linha)
         self.plain_vars = {}         # var -> classe   (nível de módulo/função)
         self.self_attrs = {}         # {classe: {attr: classe_instanciada}}
+        self.classes = set()         # classes declaradas NESTE arquivo
         self._class_stack = []
 
     def _current_class(self):
@@ -46,6 +47,7 @@ class FileAnalyzer(ast.NodeVisitor):
 
     def visit_ClassDef(self, node):
         self._class_stack.append(node.name)
+        self.classes.add(node.name)
         self.self_attrs.setdefault(node.name, {})
 
         for stmt in node.body:
@@ -128,6 +130,14 @@ def main():
             all_signals.append((cls, sig, a.filename, line))
     declared = {(cls, sig) for cls, sig, _, _ in all_signals}
 
+    # Classes que o projeto realmente define. Conexões em classes externas
+    # (QApplication, QTimer, QPushButton...) têm sinais nativos do Qt que não
+    # podem ser validados por AST, então ficam fora da checagem reversa.
+    project_classes = set()
+    for a in module_analyses:
+        project_classes |= a.classes
+    project_classes |= root_analysis.classes
+
     # Conexões resolvidas por classe, separadas por "onde" (público vs interno)
     public_connected = {(cls, sig) for cls, sig, _ in root_analysis.connections if cls}
     internal_connected = set()
@@ -138,9 +148,16 @@ def main():
 
     # --- checagem reversa: conexão no composition root apontando pra sinal
     #     que não existe (typo ou sinal removido) ---
+    #     Só vale para classes do próprio projeto: se a classe é externa (Qt),
+    #     não temos como saber quais sinais ela declara sem importar o PyQt5.
     invalid = [
         (cls, sig, line) for cls, sig, line in root_analysis.connections
-        if cls and (cls, sig) not in declared
+        if cls and cls in project_classes and (cls, sig) not in declared
+    ]
+
+    external = [
+        (cls, sig, line) for cls, sig, line in root_analysis.connections
+        if cls and cls not in project_classes
     ]
 
     print(f"🔎 {len(all_signals)} sinal(is) declarado(s) em {len(app_files)} módulo(s).\n")
@@ -177,7 +194,13 @@ def main():
         ok = False
         print(f"🚨 {len(invalid)} conexão(ões) no {COMPOSITION_ROOT.name} apontando pra sinal inexistente:")
         for cls, sig, line in invalid:
-            print(f"   {COMPOSITION_ROOT.name}:{line}   {cls}.{sig} (não declarado em nenhuma classe)")
+            print(f"   {COMPOSITION_ROOT.name}:{line}   {cls}.{sig} (não declarado em nenhuma classe do projeto)")
+        print()
+
+    if external:
+        print(f"ℹ️  {len(external)} conexão(ões) em classes externas (sinais nativos do Qt, não verificáveis por AST):")
+        for cls, sig, line in external:
+            print(f"   {COMPOSITION_ROOT.name}:{line}   {cls}.{sig}")
         print()
 
     if ok:

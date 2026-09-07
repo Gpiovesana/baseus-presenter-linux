@@ -1,0 +1,19 @@
+# Baseus Presenter Linux — dependências
+#
+# Obrigatórias
+PyQt5>=5.15,<6
+sounddevice>=0.4.6,<0.6
+
+# Hardware (leitura do passador e hot-plug USB)
+# Sem evdev o giroscópio/laser não funciona; sem pyudev o hot-plug não é
+# detectado em tempo real. O app degrada graciosamente se faltarem.
+evdev>=1.6,<2
+pyudev>=0.24,<0.25
+
+# Transcrição de voz (opcional — app funciona sem, sem transcrição)
+vosk>=0.3.44,<0.4
+
+# Tradução simultânea (opcional — app funciona sem, sem tradução)
+# Nota: a biblioteca não expõe timeout nas chamadas de rede; o app aplica
+# socket.setdefaulttimeout() ao redor delas (ver app/gui.py, socket_timeout).
+argostranslate>=1.9,<2

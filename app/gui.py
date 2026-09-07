@@ -1,11 +1,12 @@
 # ~/Documentos/Projetos/baseus-presenter-linux/app/gui.py
 import os
+import re
 import copy
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QLabel, QSlider, QComboBox, QPushButton, QSystemTrayIcon, QMenu, 
                              qApp, QTabWidget, QColorDialog, QFileDialog, QFormLayout, QInputDialog, QMessageBox, QCheckBox, QProgressDialog, QStyle)
 from PyQt5.QtCore import Qt, pyqtSignal, QThread
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor,QIcon, QPixmap, QPainter, QPen
 import sounddevice as sd
 
 try:
@@ -50,8 +51,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.config = config
         self.setWindowTitle("Baseus Presenter - Configurações (v2.0)")
+        self.setWindowIcon(QIcon.fromTheme("input-mouse")) # A CORREÇÃO DO CHATGPT
         self.setMinimumWidth(550)
-        self.setWindowIcon(qApp.style().standardIcon(QStyle.SP_ComputerIcon))
         
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
@@ -80,8 +81,15 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(line)
 
         # 🔋 O Visor de Bateria!
-        self.lbl_battery = QLabel("🔋 Bateria: Aguardando conexão...")
-        self.lbl_battery.setStyleSheet("font-size: 14px; font-weight: bold; color: #3b82f6; padding-bottom: 5px;")
+        # Substitui o texto com emoji quebrado por um botão invisível com suporte a ícone
+        self.lbl_battery = QPushButton(" Bateria: Aguardando...")
+        self.lbl_battery.setFlat(True)
+        self.lbl_battery.setStyleSheet("""
+            text-align: left; 
+            color: #4a90e2; 
+            font-weight: bold; 
+            border: none;
+        """)
         main_layout.addWidget(self.lbl_battery)
 
         tabs = QTabWidget()
@@ -144,8 +152,8 @@ class MainWindow(QMainWindow):
         row_txt.addWidget(self.lbl_txt_path); row_txt.addWidget(btn_txt)
 
         self.combo_lang = QComboBox()
-        self.combo_lang.addItems(["en", "es", "fr", "de"])
-        self.combo_lang.currentTextChanged.connect(self.check_and_download_lang)
+        self.populate_languages() # Puxa a lista dinâmica!
+        self.combo_lang.currentIndexChanged.connect(self.check_and_download_lang)
 
         form_ia.addRow("Microfone:", self.combo_mic)
         form_ia.addRow("Modelo de Voz:", box_modelos)
@@ -171,6 +179,38 @@ class MainWindow(QMainWindow):
         # Injeção inicial dos dados na tela!
         self.populate_profiles_combo()
         self._load_profile_into_widgets()
+        
+    def update_battery(self, msg):
+        # Tenta extrair a porcentagem da mensagem (ex: "100%" vira 100)
+        match = re.search(r'(\d+)', msg)
+        percent = int(match.group(1)) if match else 0
+
+        # Prepara a tela (pixmap) para desenhar o ícone
+        pixmap = QPixmap(28, 14)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        # Desenha a carcaça da pilha (em azul, combinando com sua fonte)
+        painter.setPen(QPen(QColor("#4a90e2"), 1))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(1, 1, 22, 12, 2, 2)
+        painter.drawRect(24, 4, 2, 6) # Polo positivo
+
+        # Preenche a bateria (Verde se > 20%, Vermelho se <= 20%)
+        fill_width = int(20 * (percent / 100))
+        cor = QColor(0, 200, 0) if percent > 20 else QColor(220, 50, 50)
+        painter.setBrush(cor)
+        painter.setPen(Qt.NoPen)
+        if fill_width > 0:
+            painter.drawRect(2, 2, fill_width, 10)
+
+        painter.end()
+
+        # Aplica a arte e o texto na tela
+        self.lbl_battery.setIcon(QIcon(pixmap))
+        self.lbl_battery.setIconSize(pixmap.size())
+        self.lbl_battery.setText(f" Bateria: {percent}%")
 
     # ==========================================
     # LÓGICA DE PERFIS (A MÁGICA)
@@ -251,7 +291,9 @@ class MainWindow(QMainWindow):
         self.set_btn_color(self.btn_pincel_color, p["visual"].get("pincel_color", "#FF0000"))
         
         lang = p["audio"].get("target_lang", "en")
-        self.combo_lang.setCurrentText(lang)
+        idx_lang = self.combo_lang.findData(lang)                    # LINHA NOVA 1
+        if idx_lang >= 0: self.combo_lang.setCurrentIndex(idx_lang)  # LINHA NOVA 2
+        
         mic = p["audio"].get("input_device")
         idx_mic = self.combo_mic.findData(mic)
         if idx_mic >= 0: self.combo_mic.setCurrentIndex(idx_mic)
@@ -272,7 +314,8 @@ class MainWindow(QMainWindow):
         self.config["visual"]["spotlight_size"] = self.spotlight_slider.value()
         self.config["visual"]["spotlight_opacity"] = self.spotlight_opacity.value()
         
-        self.config.setdefault("audio", {})["target_lang"] = self.combo_lang.currentText()
+        self.config.setdefault("audio", {})["target_lang"] = self.combo_lang.currentData() or "en"
+        self.config.setdefault("audio", {})["show_subtitles"] = self.check_legenda.isChecked()
         self.config["audio"]["input_device"] = self.combo_mic.currentData()
         self.config["audio"]["selected_model_path"] = self.combo_models.currentData() or ""
         self.config["audio"]["show_subtitles"] = self.check_legenda.isChecked()
@@ -289,9 +332,6 @@ class MainWindow(QMainWindow):
     # ==========================================
     # LÓGICAS ANTIGAS (Modelos, Cores e Idiomas)
     # ==========================================
-    def update_battery(self, msg):
-        self.lbl_battery.setText(msg)
-
     def set_btn_color(self, btn, color_hex):
         btn.setStyleSheet(f"background-color: {color_hex}; color: white; font-weight: bold; border: 1px solid black;")
 
@@ -353,23 +393,49 @@ class MainWindow(QMainWindow):
             self.lbl_txt_path.setText(diretorio)
             self.save_settings()
 
-    def check_and_download_lang(self, target_lang):
+    def populate_languages(self):
+            self.combo_lang.blockSignals(True)
+            self.combo_lang.clear()
+            
+            if not ARGOS_GUI_AVAILABLE:
+                self.combo_lang.addItem("Inglês (Argos não detectado)", "en")
+            else:
+                try:
+                    pacotes = argostranslate.package.get_available_packages()
+                    for p in pacotes:
+                        if p.from_code == "pt":
+                            # Tela mostra "English", mas o Python guarda "en"
+                            self.combo_lang.addItem(p.to_name, p.to_code)
+                except Exception as e:
+                    log.error(f"Erro ao carregar idiomas do Argos: {e}")
+                    self.combo_lang.addItem("Inglês (Erro ao ler índice)", "en")
+                    
+            self.combo_lang.blockSignals(False)
+    
+    def check_and_download_lang(self, index):
         self.save_settings()
         if not ARGOS_GUI_AVAILABLE: return
         
+        # Extrai o "en" ou "es" que escondemos no item
+        target_lang = self.combo_lang.itemData(index)
+        if not target_lang: return
+        
         installed = argostranslate.translate.get_installed_languages()
+        # (O resto da função continua exatamente igual a partir daqui...)
         from_lang = next((l for l in installed if l.code == "pt"), None)
         to_lang = next((l for l in installed if l.code == target_lang), None)
         
         if from_lang and to_lang and from_lang.get_translation(to_lang): return
             
-        reply = QMessageBox.question(self, "Baixar Idioma", f"O pacote '{target_lang}' não está instalado.\nDeseja baixar? (Aprox. 30MB)", QMessageBox.Yes | QMessageBox.No)
+        nome_idioma = self.combo_lang.itemText(index)
+        reply = QMessageBox.question(self, "Baixar Idioma", f"O idioma '{nome_idioma}' não está instalado.\nDeseja baixar? (Aprox. 30MB)", QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
             self.progress = QProgressDialog("Baixando pacote... Aguarde.", None, 0, 0, self)
             self.progress.setWindowTitle("Argos")
             self.progress.setModal(True); self.progress.show()
             self.installer = PackageInstallThread("pt", target_lang)
             self.installer.finished.connect(self.on_install_finished)
+            self.installer.finished.connect(self.installer.deleteLater)  # Cleanup
             self.installer.start()
 
     def on_install_finished(self, success, msg):
@@ -389,13 +455,20 @@ class TrayIcon(QSystemTrayIcon):
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
         self.main_window = main_window
-        
-        # Usa um ícone seguro do tema do sistema para nunca sumir
-        icon = qApp.style().standardIcon(QStyle.SP_FileDialogDetailedView)
-        self.setIcon(icon)
-        
+        self.setIcon(QIcon.fromTheme("input-mouse"))
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            log.warning("Bandeja do sistema indisponível. No Zorin/GNOME, pode ser necessário instalar a extensão 'AppIndicator Support'.")
         menu = QMenu()
+        # A bateria fixa no menu sugerida pelos dois IAs!
+        self.battery_action = menu.addAction("🔋 Bateria: Aguardando passador...")
+        self.battery_action.setEnabled(False) 
+        menu.addSeparator()
+        
         menu.addAction("Configurações").triggered.connect(self.main_window.showNormal)
         menu.addAction("Sair").triggered.connect(qApp.quit)
         self.setContextMenu(menu)
         self.show()
+    
+    def update_battery(self, msg):
+        self.battery_action.setText(msg)
+        self.setToolTip(f"Baseus Presenter - {msg}")

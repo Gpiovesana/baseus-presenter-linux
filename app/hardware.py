@@ -23,7 +23,6 @@ except ImportError:
 class HardwareReader(QThread):
     pointer_active = pyqtSignal(bool)
     toggle_mode = pyqtSignal()
-    trigger_click = pyqtSignal()
     battery_update = pyqtSignal(str)
     pen_active = pyqtSignal(bool)
     pen_clear = pyqtSignal()
@@ -37,6 +36,7 @@ class HardwareReader(QThread):
         self.product_id_hex = product_id
         self.vendor_id_str = vendor_id.upper()
         self.running = True
+        self._rescan_requested = False  # Flag para rescan seguro fora do select
 
     def run(self):
         log.info("Iniciando monitoramento USB (Hidraw + Evdev)...")
@@ -134,8 +134,8 @@ class HardwareReader(QThread):
                 # ---- SENSOR 2: HOTPLUG (Colocar/Tirar do USB) ----
                 if monitor and fd == monitor.fileno():
                     device = monitor.poll(0)
-                    if device and device.action in ['add', 'remove']: 
-                        time.sleep(0.5); scan_devices()
+                    if device and device.action in ['add', 'remove']:
+                        self._rescan_requested = True  # Agenda rescan seguro
                     continue
 
                 # ---- SENSOR 3: HIDRAW (Os Botões Baseus) ----
@@ -161,7 +161,16 @@ class HardwareReader(QThread):
                         elif comando == 0x68:
                             active_tool = "PEN"; last_gyro_time = time.time()
                             if not is_pen_drawing: self.pen_active.emit(True); is_pen_drawing = True
-                        elif comando in [0x6a, 0x6c, 0x67, 0x69]: self.pen_clear.emit() 
+                        elif comando == 0x67:
+                            # O Verdadeiro Apagador (Clique Curto)
+                            log.debug("Borracha acionada pelo passador!")
+                            self.pen_clear.emit()
+                            
+                        elif comando in [0x69, 0x6a, 0x6c]:
+                            # 0x69 = Soltou o botão do pincel (o fim do traço é gerido pelo giroscópio)
+                            # 0x6a e 0x6c = Passar Slides (o Linux já entende isso nativamente)
+                            # Não fazemos nada com eles aqui para evitar bugs visuais!
+                            pass
                         elif comando == 0x6d: self.black_screen_toggle.emit()
                         
                         # A INVERSÃO DEFINITIVA CALCULADA!
@@ -188,11 +197,15 @@ class HardwareReader(QThread):
             if time.time() - last_gyro_time > 0.3:
                 if is_drawing:
                     self.pointer_active.emit(False); is_drawing = False
-                    if active_tool == "LASER" and not just_toggled and (time.time() - press_time < 0.4): 
-                        self.trigger_click.emit()
                 if is_pen_drawing:
                     self.pen_active.emit(False); is_pen_drawing = False
                 active_tool = None
+
+            # Rescan seguro APÓS o select (evita FD stale)
+            if self._rescan_requested:
+                self._rescan_requested = False
+                time.sleep(0.5)
+                scan_devices()
 
         # Limpa tudo ao sair (Fim do vazamento de RAM!)
         for fd in list(self.fds.keys()):
@@ -205,4 +218,4 @@ class HardwareReader(QThread):
 
     def stop(self):
         self.running = False
-        self.wait()
+        self.wait(3000)  # Timeout de 3s para evitar travamento

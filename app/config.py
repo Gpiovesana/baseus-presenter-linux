@@ -1,6 +1,7 @@
 # ~/Documentos/Projetos/baseus-presenter-linux/app/config.py
 import os
 import json
+import copy
 from .logger import get_logger
 
 log = get_logger(__name__)
@@ -77,7 +78,7 @@ def _deep_merge(base, update):
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
-        return DEFAULT_CONFIG.copy()
+        return copy.deepcopy(DEFAULT_CONFIG)
         
     try:
         with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
@@ -87,11 +88,11 @@ def load_config():
             migrated_config = _migrate_to_profiles(user_config)
             
             # 2. Garante que qualquer chave nova do sistema seja adicionada
-            final_config = _deep_merge(DEFAULT_CONFIG.copy(), migrated_config)
+            final_config = _deep_merge(copy.deepcopy(DEFAULT_CONFIG), migrated_config)
             return final_config
     except Exception as e:
         log.error(f"Erro ao carregar configurações: {e}. Usando padrões.")
-        return DEFAULT_CONFIG.copy()
+        return copy.deepcopy(DEFAULT_CONFIG)
 
 def save_config(config):
     os.makedirs(CONFIG_DIR, exist_ok=True)

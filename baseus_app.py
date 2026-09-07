@@ -53,6 +53,7 @@ def main():
     hardware.pen_clear.connect(overlay.pen_clear)
     hardware.record_toggled.connect(overlay.set_recording)
     hardware.translate_toggled.connect(overlay.set_translating)
+    hardware.black_screen_toggle.connect(overlay.toggle_black_screen)
     
     # Hardware conversando com o Áudio (Usa as novas funções limpas)
     hardware.record_toggled.connect(audio.set_recording)
@@ -69,7 +70,7 @@ def main():
     
     # Passa a bateria para a Janela e para a Bandeja do Sistema (Ícone)
     hardware.battery_update.connect(settings_gui.update_battery)
-    hardware.battery_update.connect(lambda msg: tray.setToolTip(f"Baseus Presenter - {msg}"))
+    hardware.battery_update.connect(tray.update_battery)
     # =========================================================================
 
     # 5. Dando a partida nos motores!
@@ -77,6 +78,20 @@ def main():
     audio.start()
     overlay.show()
     settings_gui.show() # <-- ADICIONE ESTA LINHA AQUI!
+    
+    # Limpeza ao sair
+    def cleanup():
+        log.info("Encerrando threads...")
+        hardware.stop()
+        audio.stop()
+        overlay.close()
+        try:
+            os.unlink(lock_file)
+        except OSError:
+            pass
+        lock_fp.close()
+    
+    app.aboutToQuit.connect(cleanup)
     
     log.info("Todos os sistemas online. Aguardando comandos do passador.")
     sys.exit(app.exec_())

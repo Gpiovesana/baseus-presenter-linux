@@ -3,6 +3,7 @@ import os
 import json
 import queue
 import datetime
+import threading
 from urllib.error import URLError
 from PyQt5.QtCore import QThread, pyqtSignal
 
@@ -27,18 +28,6 @@ except ImportError:
     ARGOS_AVAILABLE = False
     log.warning("Argos Translate não encontrado. Tradução desativada.")
 
-class ArgosIndexThread(QThread):
-    finished = pyqtSignal(bool, str)
-    def run(self):
-        if not ARGOS_AVAILABLE:
-            self.finished.emit(False, "Argos não instalado.")
-            return
-        try:
-            argostranslate.package.update_package_index()
-            self.finished.emit(True, "Índice atualizado.")
-        except Exception as e:
-            self.finished.emit(False, str(e))
-
 class AudioThread(QThread):
     partial_ready = pyqtSignal(str)
     final_ready = pyqtSignal(str)
@@ -56,6 +45,7 @@ class AudioThread(QThread):
         self.q = queue.Queue()
         self._needs_reload = True 
         self.txt_path = None
+        self._txt_lock = threading.Lock()  # Protege acesso concorrente a txt_path
 
     def set_recording(self, state):
         self.is_recording = state
@@ -67,18 +57,22 @@ class AudioThread(QThread):
             pasta = self.config.get("save_dir", os.path.expanduser("~"))
             os.makedirs(pasta, exist_ok=True)
             nome_arquivo = datetime.datetime.now().strftime("Aula_%Y-%m-%d_%H-%M-%S.txt")
-            self.txt_path = os.path.join(pasta, nome_arquivo)
-            with open(self.txt_path, 'w', encoding='utf-8') as f:
+            txt_path = os.path.join(pasta, nome_arquivo)
+            with open(txt_path, 'w', encoding='utf-8') as f:
                 f.write(f"--- Transcrição Iniciada: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')} ---\n\n")
             
+            with self._txt_lock:
+                self.txt_path = txt_path
+            
             # Avisa se está silencioso ou com legenda
-            if self.config.get("show_subtitles", True):
+            if self.config.get("audio", {}).get("show_subtitles", True):
                 self.audio_warning.emit("🎙️ Gravação Iniciada (Com Legendas)!")
             else:
                 self.audio_warning.emit("🎙️ Gravação Silenciosa Iniciada (Salvando no TXT)!")
         else:
             self.audio_warning.emit("⏸️ Gravação Pausada.")
-            self.txt_path = None
+            with self._txt_lock:
+                self.txt_path = None
 
     def set_translating(self, state):
         self.is_translating = state
@@ -143,17 +137,18 @@ class AudioThread(QThread):
                                     final_text = self._translate_if_needed(text)
                                     
                                     # LÓGICA DE EXIBIÇÃO INTELIGENTE
-                                    if self.config.get("show_subtitles", True) or self.is_translating:
+                                    if self.config.get("audio", {}).get("show_subtitles", True) or self.is_translating:
                                         self.final_ready.emit(final_text)
                                         
-                                    if self.txt_path and self.is_recording:
-                                        with open(self.txt_path, 'a', encoding='utf-8') as f:
-                                            f.write(final_text + "\n")
+                                    with self._txt_lock:
+                                        if self.txt_path and self.is_recording:
+                                            with open(self.txt_path, 'a', encoding='utf-8') as f:
+                                                f.write(final_text + "\n")
                             else:
                                 res = json.loads(self.recognizer.PartialResult())
                                 text = res.get('partial', '')
                                 if text:
-                                    if self.config.get("show_subtitles", True) or self.is_translating:
+                                    if self.config.get("audio", {}).get("show_subtitles", True) or self.is_translating:
                                         self.partial_ready.emit(self._translate_if_needed(text))
                     else:
                         self.msleep(10)
@@ -173,4 +168,4 @@ class AudioThread(QThread):
         
     def stop(self):
         self.running = False
-        self.wait()
+        self.wait(3000)  # Timeout de 3s para evitar travamento

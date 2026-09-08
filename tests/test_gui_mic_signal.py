@@ -36,6 +36,12 @@ class MicSignalTestCase(unittest.TestCase):
         cls._app = QApplication.instance() or QApplication([])
 
     def setUp(self):
+        for target, value in (("app.gui.ARGOS_GUI_AVAILABLE", False),
+                              ("app.gui.sd.query_devices", [])):
+            patcher = (mock.patch(target, return_value=value) if isinstance(value, list)
+                       else mock.patch(target, value))
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmpdir.cleanup)
         self.config_file = os.path.join(self.tmpdir.name, "baseus_pointer.json")
@@ -85,6 +91,23 @@ class TestTrocaManualDeMicrofone(MicSignalTestCase):
         win.combo_mic.setCurrentIndex(atual)  # sem troca real
 
         self.assertEqual(recebidos, [])
+
+
+class TestNomeDoMicrofone(MicSignalTestCase):
+    def test_troca_persiste_nome_e_reabre_dispositivo(self):
+        win = self.make_window()
+        win.combo_mic.addItem("Microfone USB", (7, "Microfone USB"))
+        signals = []
+        win.input_device_changed.connect(lambda: signals.append(True))
+        win.combo_mic.setCurrentIndex(win.combo_mic.count() - 1)
+        self.assertEqual(win.config.get_audio("input_device"), 7)
+        self.assertEqual(win.config.get_audio("input_device_name"), "Microfone USB")
+        self.assertEqual(signals, [True])
+
+    def test_falha_de_enumeracao_nao_impede_abrir_janela(self):
+        with mock.patch("app.gui.sd.query_devices", side_effect=RuntimeError("sem áudio")):
+            win = self.make_window()
+        self.assertEqual(win.combo_mic.count(), 1)
 
 
 class TestTrocaDePerfilComMicrofoneDiferente(MicSignalTestCase):

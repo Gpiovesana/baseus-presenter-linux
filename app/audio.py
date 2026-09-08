@@ -6,6 +6,7 @@ import time
 import array
 import datetime
 import threading
+import tempfile
 from urllib.error import URLError
 from PyQt5.QtCore import QThread, pyqtSignal
 
@@ -155,21 +156,23 @@ class AudioThread(QThread):
         """
         if state:
             if not self.model:
-                self.audio_warning.emit("⚠️ IA de Voz ausente!")
+                self.audio_error.emit("⚠️ IA de Voz ausente!")
                 return  # is_recording permanece no valor anterior (False)
 
             pasta = self.config.get("save_dir", os.path.expanduser("~"))
             try:
                 os.makedirs(pasta, exist_ok=True)
-                nome_arquivo = datetime.datetime.now().strftime("Aula_%Y-%m-%d_%H-%M-%S.txt")
-                txt_path = os.path.join(pasta, nome_arquivo)
-                with open(txt_path, 'w', encoding='utf-8') as f:
+                prefix = datetime.datetime.now().strftime("Aula_%Y-%m-%d_%H-%M-%S_")
+                with tempfile.NamedTemporaryFile(
+                        mode='w', encoding='utf-8', prefix=prefix, suffix='.txt',
+                        dir=pasta, delete=False) as f:
+                    txt_path = f.name
                     f.write(f"--- Transcrição Iniciada: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')} ---\n\n")
             except OSError as exc:
                 # Pasta sem permissao / disco cheio: avisa em vez de deixar
                 # o estado "ativo" sem nenhum arquivo de saida por baixo.
                 log.exception(f"Não foi possível criar o arquivo de transcrição: {exc}")
-                self.audio_warning.emit("⚠️ Falha ao criar o arquivo da aula!")
+                self.audio_error.emit("⚠️ Falha ao criar o arquivo da aula!")
                 return  # is_recording permanece False; nada foi validado ainda
 
             # So agora, com modelo E arquivo confirmados, ativa o estado.
@@ -296,17 +299,19 @@ class AudioThread(QThread):
             return
 
         try:
-            # Drena o que sobrou na fila para dentro do reconhecedor.
-            while True:
+            # Limita ao áudio já enfileirado; captura simultânea não pode
+            # prolongar indefinidamente a finalização.
+            texts = []
+            for _ in range(self.q.qsize()):
                 try:
                     data = self.q.get_nowait()
                 except queue.Empty:
                     break
-                self.recognizer.AcceptWaveform(data)
+                if self.recognizer.AcceptWaveform(data):
+                    texts.append(json.loads(self.recognizer.Result()).get('text', ''))
 
-            res = json.loads(self.recognizer.FinalResult())
-            text = res.get('text', '')
-            if text:
+            texts.append(json.loads(self.recognizer.FinalResult()).get('text', ''))
+            for text in filter(None, texts):
                 final_text = self._translate_if_needed(text)
                 if ctx["show_subtitles"] or self.is_translating:
                     self.final_ready.emit(final_text)
@@ -459,6 +464,13 @@ class AudioThread(QThread):
             self.msleep(100)
 
     def run(self):
+        try:
+            self._run_capture()
+        finally:
+            if self._pending_finalize:
+                self._finalize_pending_utterance()
+
+    def _run_capture(self):
         # #16: loop EXTERNO — cada iteração abre um stream com o device_id
         # mais atual. Uma falha do stream ou um pedido de troca de
         # microfone encerram a iteração interna sem matar a QThread; o loop

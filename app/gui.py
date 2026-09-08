@@ -2,13 +2,14 @@
 import os
 import re
 import copy
-import socket
 import contextlib
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                             QLabel, QSlider, QComboBox, QPushButton, QSystemTrayIcon, QMenu, 
+import socket
+import threading
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+                             QLabel, QSlider, QComboBox, QPushButton, QSystemTrayIcon, QMenu,
                              qApp, QTabWidget, QColorDialog, QFileDialog, QFormLayout, QInputDialog, QMessageBox, QCheckBox, QProgressDialog, QStyle)
-from PyQt5.QtCore import Qt, pyqtSignal, QThread, QTimer, QSignalBlocker
-from PyQt5.QtGui import QColor,QIcon, QPixmap, QPainter, QPen
+from PyQt5.QtCore import Qt, pyqtSignal, QThread
+from PyQt5.QtGui import QColor, QIcon, QPixmap, QPainter, QPen
 import sounddevice as sd
 
 try:
@@ -19,12 +20,9 @@ except ImportError:
     ARGOS_GUI_AVAILABLE = False
 
 from .logger import get_logger
-from .config import Config, active_profile, DEFAULT_CONFIG
+from .config import Config
 
 log = get_logger(__name__)
-
-# Intervalo de debounce para persistir configurações em disco.
-SAVE_DEBOUNCE_MS = 400
 
 # Sentinela para distinguir "ainda não carregado" de "microfone padrão do
 # sistema" (que é representado por None no combo_mic).
@@ -40,6 +38,9 @@ ARGOS_INDEX_TIMEOUT_S = 15      # listar/atualizar o índice de pacotes
 ARGOS_DOWNLOAD_TIMEOUT_S = 120  # baixar o pacote (~30MB)
 
 
+_socket_timeout_lock = threading.RLock()
+
+
 @contextlib.contextmanager
 def socket_timeout(seconds):
     """
@@ -50,12 +51,13 @@ def socket_timeout(seconds):
     porque essas chamadas são serializadas (um download por vez, garantido
     por check_and_download_lang). O valor anterior é sempre restaurado.
     """
-    anterior = socket.getdefaulttimeout()
-    socket.setdefaulttimeout(seconds)
-    try:
-        yield
-    finally:
-        socket.setdefaulttimeout(anterior)
+    with _socket_timeout_lock:
+        anterior = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(seconds)
+        try:
+            yield
+        finally:
+            socket.setdefaulttimeout(anterior)
 
 
 class LanguageLoadThread(QThread):
@@ -126,44 +128,22 @@ class PackageInstallThread(QThread):
 class MainWindow(QMainWindow):
     config_updated = pyqtSignal()
     model_changed = pyqtSignal()
-    # #16: emitido quando o microfone efetivamente muda (seleção manual ou
-    # troca de perfil com device diferente). A AudioThread escuta este
-    # sinal para fechar/reabrir o RawInputStream com o novo device_id —
-    # antes, trocar o microfone na tela não tinha efeito até reiniciar o app.
     input_device_changed = pyqtSignal()
+    manual_update_requested = pyqtSignal()
 
     def __init__(self, config):
         super().__init__()
-        self.config = config if isinstance(config, Config) else Config(config)
-
-        # Debounce: valueChanged dispara a cada unidade de arraste do slider.
-        # Antes, arrastar de 30 a 250 fazia ~220 gravações em disco (cada uma
-        # com deepcopy + json.dump completo). Agora o disco é tocado uma vez,
-        # SAVE_DEBOUNCE_MS após o usuário parar de mexer.
-        self._save_timer = QTimer(self)
-        self._save_timer.setSingleShot(True)
-        self._save_timer.setInterval(SAVE_DEBOUNCE_MS)
-        self._save_timer.timeout.connect(self._flush_settings)
         self._loading_widgets = False
-        self.installer = None
-        self.progress = None
-        self._lang_loader = None
-        # Rastreia a última seleção efetiva do combo de modelos para só emitir
-        # model_changed quando o caminho realmente mudar (não a cada evento
-        # de repopulação/seleção redundante do combo).
-        self._last_selected_model_path = None
-        # Idem para o microfone (#16). Sentinela distinta de None: o valor
-        # "Padrão do Sistema" do combo_mic é justamente None, então não dá
-        # para usar None como "ainda não inicializado" sem gerar um falso
-        # positivo na primeira emissão (antes de existir uma AudioThread
-        # para reagir, o que seria inofensivo, mas deixaria o teste/uso
-        # ambíguo).
         self._last_input_device = _UNSET
-
+        self.installer = None
+        self._lang_loader = None
+        # Mesmo padrão de overlay.py/audio.py: aceita tanto o dict cru quanto
+        # o wrapper já embrulhado, para não depender de quem instancia primeiro.
+        self.config = config if isinstance(config, Config) else Config(config)
         self.setWindowTitle("Baseus Presenter - Configurações (v2.0)")
-        self.setWindowIcon(QIcon.fromTheme("input-mouse")) # A CORREÇÃO DO CHATGPT
+        self.setWindowIcon(QIcon.fromTheme("input-mouse"))
         self.setMinimumWidth(550)
-        
+
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
         main_layout = QVBoxLayout(main_widget)
@@ -171,33 +151,32 @@ class MainWindow(QMainWindow):
         # --- A BARRA DE PERFIS VIP ---
         row_perfil = QHBoxLayout()
         row_perfil.addWidget(QLabel("<b>Perfil:</b>"))
-        
+
         self.combo_profiles = QComboBox()
         self.combo_profiles.currentTextChanged.connect(self.change_profile)
-        
+
         btn_new_profile = QPushButton("Novo Perfil")
         btn_new_profile.clicked.connect(self.new_profile)
-        
+
         btn_del_profile = QPushButton("Excluir")
         btn_del_profile.clicked.connect(self.delete_profile)
-        
+
         row_perfil.addWidget(self.combo_profiles, stretch=1)
         row_perfil.addWidget(btn_new_profile)
         row_perfil.addWidget(btn_del_profile)
-        
+
         main_layout.addLayout(row_perfil)
-        
+
         line = QWidget(); line.setFixedHeight(1); line.setStyleSheet("background-color: #cccccc; margin-bottom: 5px;")
         main_layout.addWidget(line)
 
-        # 🔋 O Visor de Bateria!
-        # Substitui o texto com emoji quebrado por um botão invisível com suporte a ícone
+        # 🔋 O Visor de Bateria
         self.lbl_battery = QPushButton(" Bateria: Aguardando...")
         self.lbl_battery.setFlat(True)
         self.lbl_battery.setStyleSheet("""
-            text-align: left; 
-            color: #4a90e2; 
-            font-weight: bold; 
+            text-align: left;
+            color: #4a90e2;
+            font-weight: bold;
             border: none;
         """)
         main_layout.addWidget(self.lbl_battery)
@@ -211,21 +190,21 @@ class MainWindow(QMainWindow):
 
         self.laser_slider = QSlider(Qt.Horizontal); self.laser_slider.setRange(10, 100)
         self.laser_slider.valueChanged.connect(self.save_settings)
-        
+
         box_cores = QHBoxLayout()
         self.btn_laser_color = QPushButton("Cor do Laser")
         self.btn_laser_color.clicked.connect(lambda: self.pick_color("laser_color", self.btn_laser_color))
-        
+
         self.btn_pincel_color = QPushButton("Cor do Pincel")
         self.btn_pincel_color.clicked.connect(lambda: self.pick_color("pincel_color", self.btn_pincel_color))
         box_cores.addWidget(self.btn_laser_color); box_cores.addWidget(self.btn_pincel_color)
 
         self.lupa_slider = QSlider(Qt.Horizontal); self.lupa_slider.setRange(100, 500)
         self.lupa_slider.valueChanged.connect(self.save_settings)
-        
+
         self.spotlight_slider = QSlider(Qt.Horizontal); self.spotlight_slider.setRange(100, 800)
         self.spotlight_slider.valueChanged.connect(self.save_settings)
-        
+
         self.spotlight_opacity = QSlider(Qt.Horizontal); self.spotlight_opacity.setRange(50, 255)
         self.spotlight_opacity.valueChanged.connect(self.save_settings)
 
@@ -239,28 +218,29 @@ class MainWindow(QMainWindow):
         # --- ABA 2: ÁUDIO & I.A. ---
         tab_ia = QWidget()
         form_ia = QFormLayout(tab_ia)
-        
+
         self.combo_mic = QComboBox()
-        # O dado de cada item guarda (indice, nome). O NOME é o que será
-        # persistido: índices do PortAudio não são estáveis entre execuções
-        # (mudam quando dispositivos aparecem/desaparecem), e um índice
-        # obsoleto apontava silenciosamente para o microfone ERRADO.
         self.combo_mic.addItem("Padrão do Sistema (Automático)", None)
         try:
             for idx, dev in enumerate(sd.query_devices()):
                 if dev['max_input_channels'] > 0:
                     self.combo_mic.addItem(f"{idx} - {dev['name']}", (idx, dev['name']))
         except Exception as exc:
-            log.error(f"Falha ao listar dispositivos de áudio: {exc}")
-        self.combo_mic.currentIndexChanged.connect(self.on_mic_selected)
+            log.warning(f"Não foi possível listar microfones: {exc}")
+        self.combo_mic.currentIndexChanged.connect(self.save_settings)
 
         box_modelos = QHBoxLayout()
         self.combo_models = QComboBox()
-        self.combo_models.currentIndexChanged.connect(self.on_model_selected)
-        
+        self.combo_models.currentIndexChanged.connect(self.save_settings)
+
         btn_add = QPushButton("Adicionar"); btn_add.clicked.connect(self.add_model)
         btn_del = QPushButton("Remover"); btn_del.clicked.connect(self.delete_model)
         box_modelos.addWidget(self.combo_models); box_modelos.addWidget(btn_add); box_modelos.addWidget(btn_del)
+        # Guarda o path selecionado para só emitir model_changed quando o
+        # modelo REALMENTE mudar (evita reload do Vosk ao trocar outro campo
+        # qualquer que também dispare save_settings indiretamente). Setado de
+        # verdade em _load_profile_into_widgets(), chamado logo abaixo.
+        self._last_model_path = None
 
         row_txt = QHBoxLayout()
         self.lbl_txt_path = QLabel(self.config.get("save_dir", os.path.expanduser("~")))
@@ -269,7 +249,7 @@ class MainWindow(QMainWindow):
         row_txt.addWidget(self.lbl_txt_path); row_txt.addWidget(btn_txt)
 
         self.combo_lang = QComboBox()
-        self.populate_languages() # Dispara o carregamento assíncrono
+        self.populate_languages()
         self.combo_lang.currentIndexChanged.connect(self.check_and_download_lang)
 
         form_ia.addRow("Microfone:", self.combo_mic)
@@ -281,40 +261,40 @@ class MainWindow(QMainWindow):
         # --- ABA 3: GERAL ---
         tab_geral = QWidget()
         form_geral = QFormLayout(tab_geral)
-        
+
         self.combo_close = QComboBox()
         self.combo_close.addItems(["Minimizar para a Bandeja (Segundo Plano)", "Sair do Aplicativo completamente"])
         self.combo_close.currentIndexChanged.connect(self.save_settings)
-        
+
         self.check_legenda = QCheckBox("Exibir as legendas na tela ao usar o botão 'Gravar'")
         self.check_legenda.toggled.connect(self.save_settings)
-        
+
+        self.btn_check_update = QPushButton("Verificar Atualizações")
+        self.btn_check_update.clicked.connect(self.manual_update_requested.emit)
+
         form_geral.addRow("Ao clicar no X da janela:", self.combo_close)
         form_geral.addRow("Visual:", self.check_legenda)
+        form_geral.addRow("Software:", self.btn_check_update)
         tabs.addTab(tab_geral, "Geral")
 
-        # Injeção inicial dos dados na tela!
+        # Injeção inicial dos dados na tela
         self.populate_profiles_combo()
         self._load_profile_into_widgets()
-        
+
     def update_battery(self, msg):
-        # Tenta extrair a porcentagem da mensagem (ex: "100%" vira 100)
         match = re.search(r'(\d+)', msg)
         percent = int(match.group(1)) if match else 0
 
-        # Prepara a tela (pixmap) para desenhar o ícone
         pixmap = QPixmap(28, 14)
         pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Desenha a carcaça da pilha (em azul, combinando com sua fonte)
         painter.setPen(QPen(QColor("#4a90e2"), 1))
         painter.setBrush(Qt.NoBrush)
         painter.drawRoundedRect(1, 1, 22, 12, 2, 2)
-        painter.drawRect(24, 4, 2, 6) # Polo positivo
+        painter.drawRect(24, 4, 2, 6)
 
-        # Preenche a bateria (Verde se > 20%, Vermelho se <= 20%)
         fill_width = int(20 * (percent / 100))
         cor = QColor(0, 200, 0) if percent > 20 else QColor(220, 50, 50)
         painter.setBrush(cor)
@@ -324,10 +304,29 @@ class MainWindow(QMainWindow):
 
         painter.end()
 
-        # Aplica a arte e o texto na tela
         self.lbl_battery.setIcon(QIcon(pixmap))
         self.lbl_battery.setIconSize(pixmap.size())
         self.lbl_battery.setText(f" Bateria: {percent}%")
+
+    # --- CONTROLES DE ATUALIZAÇÃO ---
+    def set_update_checking_state(self, is_checking):
+        self.btn_check_update.setEnabled(not is_checking)
+        self.btn_check_update.setText("Buscando no GitHub..." if is_checking else "Verificar Atualizações")
+
+    def prompt_update(self, version):
+        reply = QMessageBox.question(
+            self,
+            "Atualização Disponível",
+            f"A versão {version} do Baseus Presenter foi lançada.\n\nDeseja fechar o aplicativo e atualizar agora?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        return reply == QMessageBox.Yes
+
+    def show_up_to_date(self):
+        QMessageBox.information(self, "Atualização", "Você já está rodando a versão mais recente.")
+
+    def show_update_error(self, error):
+        QMessageBox.warning(self, "Erro de Conexão", f"Não foi possível consultar o GitHub:\n\n{error}")
 
     # ==========================================
     # LÓGICA DE PERFIS (A MÁGICA)
@@ -335,278 +334,176 @@ class MainWindow(QMainWindow):
     def populate_profiles_combo(self):
         self.combo_profiles.blockSignals(True)
         self.combo_profiles.clear()
-        with self.config.mutate() as data:
-            nomes = list(data["profiles"].keys())
-            ativo = data["active_profile"]
-        self.combo_profiles.addItems(nomes)
-        self.combo_profiles.setCurrentText(ativo)
+        self.combo_profiles.addItems(list(self.config.get("profiles", {}).keys()))
+        self.combo_profiles.setCurrentText(self.config.get("active_profile", "Padrão"))
         self.combo_profiles.blockSignals(False)
 
     def change_profile(self, profile_name):
         with self.config.mutate() as data:
-            existe = bool(profile_name) and profile_name in data["profiles"]
-            if existe:
+            valid = profile_name and profile_name in data["profiles"]
+            if valid:
                 data["active_profile"] = profile_name
-        if existe:
-            # #20: persiste active_profile IMEDIATAMENTE. Antes, se o usuário
-            # só trocasse de perfil e encerrasse o app sem tocar em nenhum
-            # widget, a troca nunca chegava ao disco (nada chamava save())
-            # e desaparecia no próximo início.
-            self.config.save()
-            self._load_profile_into_widgets()
-            
-            # Avisa os outros módulos que tudo mudou!
-            self.model_changed.emit()
-            self.config_updated.emit()
+
+        if not valid:
+            return
+
+        self._load_profile_into_widgets()
+
+        # Sem isso, a troca de perfil só existia em memória: fechar o app
+        # sem tocar em nenhum slider fazia o active_profile voltar ao
+        # valor antigo no próximo boot, porque nunca era salvo em disco.
+        self.config.save()
+
+        self.model_changed.emit()
+        self.config_updated.emit()
 
     def new_profile(self):
         nome, ok = QInputDialog.getText(self, "Novo Perfil", "Nome do novo perfil (ex: Aula IFMG):")
-        if ok and nome:
-            nome = nome.strip()
-            if not nome:
-                QMessageBox.warning(self, "Erro", "O nome do perfil não pode ser vazio.")
-                return
+        if not (ok and nome):
+            return
 
-            with self.config.mutate() as data:
-                if nome in data["profiles"]:
-                    duplicado = True
-                else:
-                    duplicado = False
-                    # Clona o perfil atual
-                    current = data["active_profile"]
-                    data["profiles"][nome] = copy.deepcopy(data["profiles"][current])
-                    data["active_profile"] = nome
+        with self.config.mutate() as data:
+            if nome in data["profiles"]:
+                already_exists = True
+            else:
+                already_exists = False
+                current = data["active_profile"]
+                data["profiles"][nome] = copy.deepcopy(data["profiles"][current])
+                data["active_profile"] = nome
 
-            if duplicado:
-                QMessageBox.warning(self, "Erro", "Já existe um perfil com esse nome.")
-                return
+        if already_exists:
+            QMessageBox.warning(self, "Erro", "Já existe um perfil com esse nome.")
+            return
 
-            # #1/#2: NUNCA chamar save_settings() (orientado pelos widgets)
-            # depois de uma mutação direta do config. Os widgets ainda
-            # refletem o perfil ANTERIOR nesse ponto; salvar aqui gravaria o
-            # perfil clonado com os valores do perfil de origem só por causa
-            # de um evento de sinal fora de ordem. A ordem correta é:
-            # persistir os dados que já mutamos, DEPOIS recarregar os widgets.
-            self.config.save()
-            self.populate_profiles_combo()
-            self._load_profile_into_widgets()
-            self.model_changed.emit()
-            self.config_updated.emit()
+        self.config.save()
+        self.populate_profiles_combo()
+        self._load_profile_into_widgets()
+        self.model_changed.emit()
+        self.config_updated.emit()
 
     def delete_profile(self):
-        with self.config.mutate() as data:
-            current = data["active_profile"]
-            unico = len(data["profiles"]) <= 1
-        if unico:
+        current = self.config.get("active_profile")
+
+        if len(self.config.get("profiles", {})) <= 1:
             QMessageBox.warning(self, "Aviso", "Você não pode excluir o único perfil existente.")
             return
-            
-        reply = QMessageBox.question(self, "Excluir", f"Excluir o perfil '{current}'?", QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            with self.config.mutate() as data:
-                data["profiles"].pop(current, None)
-                if not data["profiles"]:
-                    # Nunca deixe o app sem nenhum perfil.
-                    data["profiles"]["Padrão"] = copy.deepcopy(
-                        DEFAULT_CONFIG["profiles"]["Padrão"])
-                data["active_profile"] = next(iter(data["profiles"]))
 
-            # #1: Excluir um perfil sobrescrevia outro perfil. A ordem antiga
-            # chamava save_settings() (que lê os SLIDERS/COMBOS ATUAIS,
-            # ainda com os valores do perfil excluído) depois de já ter
-            # trocado active_profile para o sobrevivente — persistindo os
-            # valores errados por cima dele. Agora só persistimos o que já
-            # está correto em memória e SÓ DEPOIS recarregamos os widgets.
-            self.config.save()
-            self.populate_profiles_combo()
-            self._load_profile_into_widgets()
-            self.model_changed.emit()
-            self.config_updated.emit()
+        reply = QMessageBox.question(self, "Excluir", f"Excluir o perfil '{current}'?", QMessageBox.Yes | QMessageBox.No)
+        if reply != QMessageBox.Yes:
+            return
+
+        with self.config.mutate() as data:
+            del data["profiles"][current]
+            data["active_profile"] = list(data["profiles"].keys())[0]
+
+        self.config.save()
+        self.populate_profiles_combo()
+        self._load_profile_into_widgets()
+        self.model_changed.emit()
+        self.config_updated.emit()
 
     def _load_profile_into_widgets(self):
-        # Antes havia aqui o "truque do espelho", que copiava
-        # profiles[ativo]["visual"/"audio"] para a raiz do config. Isso criava
-        # duas fontes de verdade e fazia config["audio"] existir só depois da
-        # GUI rodar (KeyError na AudioThread). Agora os consumidores leem o
-        # perfil ativo direto, via os acessadores de config.py.
-        with self.config.mutate() as data:
-            p = copy.deepcopy(active_profile(data))
+        # Snapshot único e consistente do perfil ativo — evita 10+ chamadas
+        # de get_audio/get_visual (cada uma com lock + deepcopy próprios)
+        # para montar uma única tela.
+        snap = self.config.snapshot()
+        active = snap["active_profile"]
+        p = snap["profiles"][active]
 
-        # Guarda extra: os QSignalBlocker abaixo cobrem os widgets listados,
-        # mas esta flag garante que nenhum save_settings disparado
-        # indiretamente grave dados incompletos no perfil.
+        def block_all(block):
+            self.laser_slider.blockSignals(block); self.lupa_slider.blockSignals(block)
+            self.spotlight_slider.blockSignals(block); self.spotlight_opacity.blockSignals(block)
+            self.combo_lang.blockSignals(block); self.combo_mic.blockSignals(block)
+            self.combo_models.blockSignals(block); self.check_legenda.blockSignals(block)
+            self.combo_close.blockSignals(block)
+
         self._loading_widgets = True
+        block_all(True)
 
-        # #2: Antes, refresh_models_combo() chamava blockSignals(True)/(False)
-        # PRÓPRIO no combo_models, dentro do bloco block_all(True)/(False)
-        # externo. blockSignals() não é uma pilha — é um booleano simples — e
-        # o unblock interno de refresh_models_combo desbloqueava o combo
-        # ANTES do restante desta função terminar, expondo uma janela onde
-        # selecionar um índice (ex. ao repopular) disparava save_settings()
-        # com os OUTROS widgets ainda no valor do perfil anterior.
-        # QSignalBlocker restaura o estado anterior ao sair de escopo (em vez
-        # de simplesmente desbloquear), então blocos aninhados funcionam
-        # corretamente mesmo se uma função interna também usar um.
-        blockers = [
-            QSignalBlocker(self.laser_slider), QSignalBlocker(self.lupa_slider),
-            QSignalBlocker(self.spotlight_slider), QSignalBlocker(self.spotlight_opacity),
-            QSignalBlocker(self.combo_lang), QSignalBlocker(self.combo_mic),
-            QSignalBlocker(self.combo_models), QSignalBlocker(self.check_legenda),
-            QSignalBlocker(self.combo_close),
-        ]
-        try:
-            self.laser_slider.setValue(p["visual"].get("laser_size", 30))
-            self.lupa_slider.setValue(p["visual"].get("lupa_size", 250))
-            self.spotlight_slider.setValue(p["visual"].get("spotlight_size", 300))
-            self.spotlight_opacity.setValue(p["visual"].get("spotlight_opacity", 160))
-            self.set_btn_color(self.btn_laser_color, p["visual"].get("laser_color", "#FF0000"))
-            self.set_btn_color(self.btn_pincel_color, p["visual"].get("pincel_color", "#FF0000"))
+        self.laser_slider.setValue(p["visual"].get("laser_size", 30))
+        self.lupa_slider.setValue(p["visual"].get("lupa_size", 250))
+        self.spotlight_slider.setValue(p["visual"].get("spotlight_size", 300))
+        self.spotlight_opacity.setValue(p["visual"].get("spotlight_opacity", 160))
+        self.set_btn_color(self.btn_laser_color, p["visual"].get("laser_color", "#FF0000"))
+        self.set_btn_color(self.btn_pincel_color, p["visual"].get("pincel_color", "#FF0000"))
 
-            lang = p["audio"].get("target_lang", "en")
-            idx_lang = self.combo_lang.findData(lang)
-            if idx_lang >= 0: self.combo_lang.setCurrentIndex(idx_lang)
+        lang = p["audio"].get("target_lang", "en")
+        idx_lang = self.combo_lang.findData(lang)
+        if idx_lang < 0:
+            self.combo_lang.addItem(lang, lang)
+            idx_lang = self.combo_lang.count() - 1
+        self.combo_lang.setCurrentIndex(idx_lang)
 
-            # Restaura o microfone casando pelo NOME (estável). O índice
-            # salvo serve apenas como fallback para configs legadas, que
-            # ainda não tinham 'input_device_name'.
-            idx_mic = self._find_mic_item(
-                p["audio"].get("input_device_name"),
-                p["audio"].get("input_device"),
-            )
-            if idx_mic >= 0: self.combo_mic.setCurrentIndex(idx_mic)
-            # #16: também cobre a troca de PERFIL (não só a seleção manual
-            # no combo, que fica bloqueada por QSignalBlocker durante este
-            # carregamento). Perfis diferentes podem ter microfones
-            # diferentes; sem isto, mudar de perfil não reabria o stream.
-            self._sync_input_device()
+        idx_mic = self._find_mic_item(
+            p["audio"].get("input_device_name"), p["audio"].get("input_device"))
+        self.combo_mic.setCurrentIndex(max(0, idx_mic))
 
-            self.refresh_models_combo()
-            model_path = p["audio"].get("selected_model_path", "")
-            idx_mod = self.combo_models.findData(model_path)
-            if idx_mod >= 0:
-                self.combo_models.setCurrentIndex(idx_mod)
-            self._last_selected_model_path = model_path
+        self.refresh_models_combo(models=snap.get("models", []))
+        idx_mod = self.combo_models.findData(p["audio"].get("selected_model_path", ""))
+        if idx_mod < 0:
+            saved_path = p["audio"].get("selected_model_path", "")
+            self.combo_models.addItem(saved_path or "Nenhum modelo selecionado", saved_path)
+            idx_mod = self.combo_models.count() - 1
+        self.combo_models.setCurrentIndex(idx_mod)
 
-            self.check_legenda.setChecked(p["audio"].get("show_subtitles", True))
-            self.combo_close.setCurrentIndex(1 if self.config.get("close_behavior", "tray") == "quit" else 0)
-        finally:
-            blockers.clear()  # libera os QSignalBlocker (restaura o estado anterior)
-            self._loading_widgets = False
+        self.check_legenda.setChecked(p["audio"].get("show_subtitles", True))
+        self.combo_close.setCurrentIndex(1 if snap.get("close_behavior", "tray") == "quit" else 0)
 
-    def save_settings(self, immediate=False):
-        """
-        Aplica os widgets no config em memória e AGENDA a gravação em disco.
+        block_all(False)
+        self._loading_widgets = False
+        self._sync_input_device()
 
-        Escreve direto no perfil ativo — o espelho na raiz do config não existe
-        mais. A gravação é debounced porque valueChanged dispara a cada unidade
-        de arraste do slider (eram ~220 json.dump por arraste).
-        """
+        # Baseline para a checagem de "modelo realmente mudou" em save_settings().
+        # Atualizado aqui (boot E toda troca de perfil) porque uma troca de
+        # perfil já emite model_changed explicitamente em change_profile() —
+        # sem isso, o PRÓXIMO save_settings() disparado por qualquer outro
+        # widget comparava contra o modelo do perfil anterior e emitia
+        # model_changed de novo, à toa.
+        self._last_model_path = p["audio"].get("selected_model_path", "")
+
+    def save_settings(self):
         if self._loading_widgets:
-            return  # Estamos populando a UI; não é uma edição do usuário.
+            return
+        mic_idx, mic_name = self._mic_item_data(self.combo_mic.currentIndex())
+        new_model_path = self.combo_models.currentData() or ""
+        model_path_changed = (
+            self._last_model_path is not None
+            and new_model_path != self._last_model_path
+        )
 
         with self.config.mutate() as data:
-            prof = active_profile(data)
-            visual = prof.setdefault("visual", {})
-            audio = prof.setdefault("audio", {})
+            active = data["active_profile"]
+            visual = data["profiles"][active]["visual"]
+            audio = data["profiles"][active]["audio"]
 
             visual["laser_size"] = self.laser_slider.value()
             visual["lupa_size"] = self.lupa_slider.value()
             visual["spotlight_size"] = self.spotlight_slider.value()
             visual["spotlight_opacity"] = self.spotlight_opacity.value()
 
-            audio["target_lang"] = self.combo_lang.currentData() or "en"
-            audio["show_subtitles"] = self.check_legenda.isChecked()
-            # Persiste NOME + índice. O nome é a fonte de verdade na hora de
-            # reabrir o stream; o índice fica apenas por compatibilidade.
-            mic_idx, mic_nome = self._mic_item_data(self.combo_mic.currentIndex())
+            audio["target_lang"] = (self.combo_lang.currentData()
+                                    or audio.get("target_lang", "en"))
             audio["input_device"] = mic_idx
-            audio["input_device_name"] = mic_nome
-            audio["selected_model_path"] = self.combo_models.currentData() or ""
+            audio["input_device_name"] = mic_name
+            audio["selected_model_path"] = new_model_path
+            audio["show_subtitles"] = self.check_legenda.isChecked()
 
             data["close_behavior"] = "quit" if self.combo_close.currentIndex() == 1 else "tray"
 
-        # Consumidores (overlay) atualizam na hora; só o disco é debounced.
+        self._sync_input_device()
+        self._last_model_path = new_model_path
+        self.config.save()
         self.config_updated.emit()
 
-        if immediate:
-            self._save_timer.stop()
-            self._flush_settings()
-        else:
-            self._save_timer.start()  # reinicia a contagem a cada alteração
-
-    def _flush_settings(self):
-        """Grava de fato em disco (chamado pelo timer de debounce)."""
-        self.config.save()
-
-    def flush_pending_save(self):
-        """Força a gravação de alterações pendentes (usado no encerramento)."""
-        if self._save_timer.isActive():
-            self._save_timer.stop()
-            self._flush_settings()
+        # save_settings() é chamado por QUALQUER slider/combo (laser, spotlight,
+        # idioma...), não só pelo combo de modelo. Sem essa checagem, trocar o
+        # tamanho do laser também dispararia um reload desnecessário do Vosk.
+        if model_path_changed:
+            self.model_changed.emit()
 
     # ==========================================
     # LÓGICAS ANTIGAS (Modelos, Cores e Idiomas)
     # ==========================================
-    def set_btn_color(self, btn, color_hex):
-        btn.setStyleSheet(f"background-color: {color_hex}; color: white; font-weight: bold; border: 1px solid black;")
-
-    def pick_color(self, config_key, btn):
-        cor_atual = QColor(self.config.get_visual(config_key, "#FF0000"))
-        cor_escolhida = QColorDialog.getColor(cor_atual, self, "Escolha a cor")
-        if cor_escolhida.isValid():
-            self.config.set_visual(config_key, cor_escolhida.name())
-            self.set_btn_color(btn, cor_escolhida.name())
-            self.save_settings(immediate=True)
-
-    def refresh_models_combo(self):
-        """
-        Repopula combo_models a partir do catálogo global.
-
-        Usa QSignalBlocker (não blockSignals cru) para que, quando esta
-        função é chamada de DENTRO de _load_profile_into_widgets (que também
-        protege combo_models com seu próprio QSignalBlocker), o desbloqueio
-        ocorra na ordem certa em vez de reabrir o combo prematuramente (#2).
-        """
-        blocker = QSignalBlocker(self.combo_models)
-        self.combo_models.clear()
-        models = self.config.get("models", [])
-        if not models:
-            self.combo_models.addItem("Nenhum modelo configurado", "")
-        else:
-            for m in models:
-                self.combo_models.addItem(m.get("label", "Modelo"), m.get("path"))
-        del blocker
-
-    def on_model_selected(self, index):
-        """
-        #4: Selecionar outro modelo no combo não recarregava o reconhecedor.
-        save_settings() só grava a configuração; a AudioThread só relê o
-        modelo quando recebe trigger_reload() via o sinal model_changed. Sem
-        emitir esse sinal aqui, o áudio continuava usando o modelo anterior
-        até a próxima troca de perfil.
-        """
-        self.save_settings()
-        if self._loading_widgets:
-            return  # Repopulação/carregamento de perfil, não uma escolha do usuário.
-
-        novo_path = self.combo_models.currentData() or ""
-        if novo_path != self._last_selected_model_path:
-            self._last_selected_model_path = novo_path
-            self.model_changed.emit()
-
-    def on_mic_selected(self, index):
-        """
-        #16: selecionar outro microfone precisa reabrir o stream de áudio.
-        A AudioThread lia o device_id uma única vez antes do loop de
-        captura; sem emitir um sinal aqui, a troca no combo não tinha
-        NENHUM efeito prático até o app ser reiniciado.
-        """
-        self.save_settings()
-        if self._loading_widgets:
-            return  # Repopulação/carregamento de perfil, não uma escolha do usuário.
-
-        self._sync_input_device()
-
     def _find_mic_item(self, nome_salvo, indice_salvo):
         """
         Localiza o item do combo_mic correspondente ao dispositivo salvo.
@@ -662,17 +559,37 @@ class MainWindow(QMainWindow):
             self._last_input_device = novo_device
             self.input_device_changed.emit()
 
-    def _persist_profile_and_reload(self):
-        """
-        Persiste o config atual (já mutado em memória) e só então recarrega
-        os widgets a partir dele.
+    def set_btn_color(self, btn, color_hex):
+        btn.setStyleSheet(f"background-color: {color_hex}; color: white; font-weight: bold; border: 1px solid black;")
 
-        Usada depois de qualquer mutação direta (add/delete de modelo), para
-        nunca deixar save_settings() — orientado pelos widgets ainda "antigos"
-        — sobrescrever por engano o que acabamos de mutar (#1/#3/#19).
+    def pick_color(self, config_key, btn):
+        cor_atual = QColor(self.config.get_visual(config_key, "#FF0000"))
+        cor_escolhida = QColorDialog.getColor(cor_atual, self, "Escolha a cor")
+        if cor_escolhida.isValid():
+            self.config.set_visual(config_key, cor_escolhida.name())
+            self.set_btn_color(btn, cor_escolhida.name())
+            self.save_settings()
+
+    def refresh_models_combo(self, models=None):
         """
-        self.config.save()
-        self._load_profile_into_widgets()
+        Repopula o combo de modelos.
+
+        NÃO gerencia blockSignals aqui: blockSignals(bool) é estado absoluto,
+        não um contador reentrante. Se este método travasse e destravasse por
+        conta própria, ele desbloquearia o combo mesmo quando chamado de
+        dentro de _load_profile_into_widgets/block_all(True) — o
+        setCurrentIndex() logo em seguida disparava currentIndexChanged e
+        vazava save_settings() no meio do carregamento do perfil. Quem chama
+        este método é responsável por blockSignals ao redor da chamada.
+        """
+        if models is None:
+            models = self.config.get("models", [])
+        self.combo_models.clear()
+        if not models:
+            self.combo_models.addItem("Nenhum modelo configurado")
+        else:
+            for m in models:
+                self.combo_models.addItem(m.get("label", "Modelo"), m.get("path"))
 
     def add_model(self):
         diretorio = QFileDialog.getExistingDirectory(self, "Selecione a pasta do Vosk")
@@ -680,51 +597,53 @@ class MainWindow(QMainWindow):
             nome, ok = QInputDialog.getText(self, "Nome", "Dê um nome (ex: Vosk PT-BR):")
             if ok and nome:
                 with self.config.mutate() as data:
-                    data.setdefault("models", []).append({"label": nome, "path": diretorio})
-                    active_profile(data).setdefault("audio", {})["selected_model_path"] = diretorio
+                    models = data.setdefault("models", [])
+                    models.append({"label": nome, "path": diretorio})
+                    active = data["active_profile"]
+                    data["profiles"][active]["audio"]["selected_model_path"] = diretorio
 
-                # #3: Antes, com o catálogo vazio, save_settings() lia
-                # combo_models.currentData() ANTES do combo ser repopulado
-                # com o novo item — currentData() do combo antigo/vazio é
-                # None, e isso sobrescrevia selected_model_path de volta
-                # para "". _persist_profile_and_reload() persiste o que já
-                # está correto em memória e SÓ DEPOIS recarrega (e seleciona)
-                # o combo a partir dele.
-                self._persist_profile_and_reload()
+                self.config.save()
+                self._load_profile_into_widgets()
                 self.model_changed.emit()
+                self.config_updated.emit()
 
     def delete_model(self):
         path = self.combo_models.currentData()
-        if not path: return
-        models = self.config.get("models", [])
-        model = next((m for m in models if m.get("path") == path), None)
-        
-        if model:
-            reply = QMessageBox.question(self, "Remover Modelo", f"Remover '{model.get('label')}'?", QMessageBox.Yes | QMessageBox.No)
-            if reply == QMessageBox.Yes:
-                with self.config.mutate() as data:
-                    data["models"] = [m for m in data.get("models", []) if m.get("path") != path]
+        if not path:
+            return
 
-                    # Desvincula de todos os perfis se for deletado globalmente
-                    for p_data in data.get("profiles", {}).values():
-                        audio = p_data.setdefault("audio", {})
-                        if audio.get("selected_model_path") == path:
-                            audio["selected_model_path"] = ""
+        model_label = None
+        with self.config.mutate() as data:
+            models = data.get("models", [])
+            model = next((m for m in models if m.get("path") == path), None)
+            if model:
+                model_label = model.get("label")
 
-                # #19: mesma causa do #3, na direção inversa — save_settings()
-                # lia combo_models.currentData() ainda apontando para o
-                # modelo JÁ REMOVIDO do catálogo (o combo só seria
-                # repopulado depois), restaurando esse caminho morto no
-                # perfil ativo.
-                self._persist_profile_and_reload()
-                self.model_changed.emit()
+        if not model:
+            return
+
+        reply = QMessageBox.question(self, "Remover Modelo", f"Remover '{model_label}'?", QMessageBox.Yes | QMessageBox.No)
+        if reply != QMessageBox.Yes:
+            return
+
+        with self.config.mutate() as data:
+            models = data.get("models", [])
+            data["models"] = [m for m in models if m.get("path") != path]
+            for p_data in data["profiles"].values():
+                if p_data["audio"].get("selected_model_path") == path:
+                    p_data["audio"]["selected_model_path"] = ""
+
+        self.config.save()
+        self._load_profile_into_widgets()
+        self.model_changed.emit()
+        self.config_updated.emit()
 
     def pick_txt_dir(self):
         diretorio = QFileDialog.getExistingDirectory(self, "Onde salvar os relatórios (.txt)")
         if diretorio:
             self.config.set("save_dir", diretorio)
             self.lbl_txt_path.setText(diretorio)
-            self.save_settings(immediate=True)
+            self.config.save()
 
     def populate_languages(self):
         """
@@ -761,15 +680,16 @@ class MainWindow(QMainWindow):
         # Reaplica o idioma salvo no perfil, agora que a lista existe.
         salvo = self.config.get_audio("target_lang", "en")
         idx = self.combo_lang.findData(salvo)
-        if idx >= 0:
-            self.combo_lang.setCurrentIndex(idx)
+        if idx < 0:
+            self.combo_lang.addItem(salvo, salvo)
+            idx = self.combo_lang.count() - 1
+        self.combo_lang.setCurrentIndex(idx)
         self.combo_lang.blockSignals(False)
 
     def _on_languages_failed(self, msg):
-        self.combo_lang.blockSignals(True)
-        self.combo_lang.clear()
-        self.combo_lang.addItem("Inglês (erro ao ler índice)", "en")
-        self.combo_lang.blockSignals(False)
+        # O fallback mantém o idioma do perfil; salvar outro campo não deve
+        # transformar uma falha de rede em mudança permanente de idioma.
+        self._on_languages_loaded([])
         log.warning(f"Lista de idiomas indisponível: {msg}")
 
     def check_and_download_lang(self, index):
@@ -791,7 +711,8 @@ class MainWindow(QMainWindow):
 
         try:
             installed = argostranslate.translate.get_installed_languages()
-            from_lang = next((l for l in installed if l.code == "pt"), None)
+            source_lang = self.config.get_audio("source_lang", "pt")
+            from_lang = next((l for l in installed if l.code == source_lang), None)
             to_lang = next((l for l in installed if l.code == target_lang), None)
             if from_lang and to_lang and from_lang.get_translation(to_lang):
                 return
@@ -805,9 +726,12 @@ class MainWindow(QMainWindow):
             self.progress = QProgressDialog("Baixando pacote... Aguarde.", None, 0, 0, self)
             self.progress.setWindowTitle("Argos")
             self.progress.setModal(True); self.progress.show()
-            self.installer = PackageInstallThread("pt", target_lang)
+            if self.installer is not None:
+                self.installer.deleteLater()
+            self.installer = PackageInstallThread(self.config.get_audio("source_lang", "pt"), target_lang)
+            self.installer.setParent(self)
             self.installer.finished.connect(self.on_install_finished)
-            self.installer.finished.connect(self.installer.deleteLater)  # Cleanup
+
             self.installer.start()
 
     def on_install_finished(self, success, msg):
@@ -847,8 +771,6 @@ class MainWindow(QMainWindow):
         self._lang_loader = None
 
     def closeEvent(self, event):
-        # Não perca alterações que ainda estavam no debounce.
-        self.flush_pending_save()
         if self.config.get("close_behavior", "tray") == "tray":
             event.ignore()
             self.hide()
@@ -864,16 +786,15 @@ class TrayIcon(QSystemTrayIcon):
         if not QSystemTrayIcon.isSystemTrayAvailable():
             log.warning("Bandeja do sistema indisponível. No Zorin/GNOME, pode ser necessário instalar a extensão 'AppIndicator Support'.")
         menu = QMenu()
-        # A bateria fixa no menu sugerida pelos dois IAs!
         self.battery_action = menu.addAction("🔋 Bateria: Aguardando passador...")
-        self.battery_action.setEnabled(False) 
+        self.battery_action.setEnabled(False)
         menu.addSeparator()
-        
+
         menu.addAction("Configurações").triggered.connect(self.main_window.showNormal)
         menu.addAction("Sair").triggered.connect(qApp.quit)
         self.setContextMenu(menu)
         self.show()
-    
+
     def update_battery(self, msg):
         self.battery_action.setText(msg)
         self.setToolTip(f"Baseus Presenter - {msg}")

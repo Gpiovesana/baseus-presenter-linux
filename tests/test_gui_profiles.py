@@ -38,6 +38,12 @@ class GuiTestCase(unittest.TestCase):
         cls._app = QApplication.instance() or QApplication([])
 
     def setUp(self):
+        for target, value in (("app.gui.ARGOS_GUI_AVAILABLE", False),
+                              ("app.gui.sd.query_devices", [])):
+            patcher = (mock.patch(target, return_value=value) if isinstance(value, list)
+                       else mock.patch(target, value))
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmpdir.cleanup)
         self.config_file = os.path.join(self.tmpdir.name, "baseus_pointer.json")
@@ -109,6 +115,17 @@ class TestCarregarPerfilNaoAutoModifica(GuiTestCase):
         win._loading_widgets = False
         # Nenhuma gravação deveria ter ocorrido enquanto a flag estava ativa.
         self.assertEqual(win.config.snapshot()["profiles"], antes["profiles"])
+
+
+class TestFalhaDeIdiomas(GuiTestCase):
+    def test_falha_do_indice_preserva_idioma_ao_salvar_outro_campo(self):
+        data = copy.deepcopy(cfg.DEFAULT_CONFIG)
+        data["profiles"]["Padrão"]["audio"]["target_lang"] = "es"
+        win = self.make_window(data)
+        win._on_languages_failed("sem conexão")
+        self.assertEqual(win.combo_lang.currentData(), "es")
+        win.laser_slider.setValue(67)
+        self.assertEqual(win.config.get_audio("target_lang"), "es")
 
 
 class TestAdicionarPrimeiroModelo(GuiTestCase):

@@ -2,129 +2,172 @@
 set -euo pipefail
 
 REPO="Gpiovesana/baseus-presenter-linux"
-INSTALL_DIR="$HOME/BaseusPresenter"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_DIR="${BASEUS_INSTALL_DIR:-$SCRIPT_DIR}"
+BACKUP_DIR="${INSTALL_DIR}_backup"
+STAGING_DIR="${INSTALL_DIR}_staging"
+STATE_FILE="${BASEUS_UPDATE_STATE_FILE:-${INSTALL_DIR}.update-state}"
+LOCK_FILE="${BASEUS_UPDATE_LOCK_FILE:-${INSTALL_DIR}.update-lock}"
 
 VERSION="${1:-}"
 PID="${2:-}"
-
-if [[ -z "$VERSION" ]]; then
-    echo "❌ Versão não informada."
-    exit 1
-fi
-
-if [[ -z "$PID" ]]; then
-    echo "❌ PID do aplicativo não informado."
-    exit 1
-fi
-
+PREPARED_FILE="${3:-}"
 VERSION="${VERSION#v}"
 
-echo "🔄 Atualizando Baseus Presenter para v$VERSION..."
+if [[ ! "$VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]] ||
+   [[ ! "$PID" =~ ^[0-9]+$ ]] || [[ -z "$PREPARED_FILE" ]]; then
+    echo "❌ Uso: ./updater.sh <versao> <pid_do_app> <arquivo_de_estado>"
+    exit 1
+fi
+
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+    echo "❌ Outra atualização já está em andamento."
+    exit 1
+fi
 
 TMP_DIR="$(mktemp -d)"
-BACKUP_DIR="$INSTALL_DIR/.update-backup"
-RELEASE_DIR="$TMP_DIR/release"
-
+STARTUP_READY_FILE="$TMP_DIR/startup-ready"
+PREPARED=false
 cleanup() {
-    rm -rf "$TMP_DIR"
+    result=$?
+    if [[ $result -ne 0 && "$PREPARED" == false ]]; then
+        printf 'ERROR\n' > "$PREPARED_FILE"
+    fi
+    rm -rf -- "$TMP_DIR" "$STAGING_DIR"
 }
-
 trap cleanup EXIT
 
-mkdir -p "$RELEASE_DIR"
-
-echo "📥 Baixando Release..."
-
-curl -fL \
+echo "🔄 Preparando Baseus Presenter v$VERSION..."
+echo "📥 Baixando release..."
+curl -sSL -f --connect-timeout 10 --max-time 180 \
     "https://github.com/$REPO/archive/refs/tags/v$VERSION.tar.gz" \
     -o "$TMP_DIR/release.tar.gz"
 
-echo "📦 Extraindo..."
-
+echo "📦 Extraindo e validando pacote..."
 tar -xzf "$TMP_DIR/release.tar.gz" -C "$TMP_DIR"
-
-EXTRACTED_DIR="$(find "$TMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -1)"
-
-if [[ ! -f "$EXTRACTED_DIR/baseus_app.py" ]]; then
-    echo "❌ Release inválida: baseus_app.py não encontrado."
-    exit 1
-fi
-
-if [[ ! -f "$EXTRACTED_DIR/requirements.txt" ]]; then
-    echo "❌ Release inválida: requirements.txt não encontrado."
-    exit 1
-fi
-
-if [[ ! -f "$EXTRACTED_DIR/version" ]]; then
-    echo "❌ Release inválida: arquivo version não encontrado."
-    exit 1
-fi
-
-echo "✓ Release validada."
-
-# Espera o aplicativo principal terminar.
-echo "⏳ Aguardando o Baseus Presenter encerrar..."
-
-while kill -0 "$PID" 2>/dev/null; do
-    sleep 0.5
+EXTRACTED_DIR="$(find "$TMP_DIR" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+for file in app baseus_app.py requirements.txt version updater.sh; do
+    if [[ ! -e "$EXTRACTED_DIR/$file" ]]; then
+        echo "❌ Release inválida: '$file' não encontrado."
+        exit 1
+    fi
 done
 
-echo "✓ Aplicativo encerrado."
-
-# Backup da instalação atual.
-rm -rf "$BACKUP_DIR"
-mv "$INSTALL_DIR" "$BACKUP_DIR"
-
-# Cria nova instalação.
-mkdir -p "$INSTALL_DIR"
-
-cp -r "$EXTRACTED_DIR/app" "$INSTALL_DIR/"
-cp "$EXTRACTED_DIR/baseus_app.py" "$INSTALL_DIR/"
-cp "$EXTRACTED_DIR/requirements.txt" "$INSTALL_DIR/"
-cp "$EXTRACTED_DIR/version" "$INSTALL_DIR/"
-
-echo "🐍 Atualizando dependências..."
-
-python3 -m venv "$INSTALL_DIR/.venv"
-
-"$INSTALL_DIR/.venv/bin/pip" install --upgrade pip
-"$INSTALL_DIR/.venv/bin/pip" install \
-    -r "$INSTALL_DIR/requirements.txt"
-
-echo "✓ Nova versão instalada."
-
-# Atualiza o lançador.
-DESKTOP_FILE="$HOME/.local/share/applications/baseus-presenter.desktop"
-
-PYTHON="$INSTALL_DIR/.venv/bin/python"
-
-cat > "$DESKTOP_FILE" <<EOF
-[Desktop Entry]
-Type=Application
-Name=Baseus Presenter
-Comment=Driver não-oficial para o passador Baseus Orange Dot AI
-Exec="$PYTHON" "$INSTALL_DIR/baseus_app.py"
-Path=$INSTALL_DIR
-Icon=input-tablet
-Terminal=false
-Categories=Utility;
-StartupNotify=false
-EOF
-
-chmod +x "$DESKTOP_FILE"
-
-# Atualiza o autostart somente se ele já existia.
-AUTOSTART_FILE="$HOME/.config/autostart/baseus-presenter.desktop"
-
-if [[ -f "$AUTOSTART_FILE" ]]; then
-    cp "$DESKTOP_FILE" "$AUTOSTART_FILE"
+RELEASE_VERSION="$(tr -d '[:space:]' < "$EXTRACTED_DIR/version")"
+if [[ "${RELEASE_VERSION#v}" != "$VERSION" ]]; then
+    echo "❌ Versão do pacote não confere (esperada: $VERSION; encontrada: $RELEASE_VERSION)."
+    exit 1
 fi
 
-echo "🧹 Removendo backup da versão antiga..."
+rm -rf -- "$STAGING_DIR"
+mkdir -p "$STAGING_DIR"
+cp -a "$EXTRACTED_DIR/app" "$STAGING_DIR/"
+cp "$EXTRACTED_DIR/baseus_app.py" "$EXTRACTED_DIR/requirements.txt" \
+   "$EXTRACTED_DIR/version" "$EXTRACTED_DIR/updater.sh" "$STAGING_DIR/"
+chmod +x "$STAGING_DIR/updater.sh"
 
-rm -rf "$BACKUP_DIR"
+echo "🐍 Preparando dependências em staging..."
+python3 -m venv "$STAGING_DIR/.venv"
+"$STAGING_DIR/.venv/bin/python" -m pip install -q --upgrade pip
+"$STAGING_DIR/.venv/bin/python" -m pip install -q -r "$STAGING_DIR/requirements.txt"
 
-echo "✅ Atualização para v$VERSION concluída!"
+# Entry points e scripts de ativação gravam o caminho absoluto da venv.
+# Ajusta só arquivos de texto, ainda em staging: falha aqui preserva o app.
+"$STAGING_DIR/.venv/bin/python" - "$STAGING_DIR/.venv" "$INSTALL_DIR/.venv" <<'PY_RELOCATE'
+import os
+import pathlib
+import sys
+old, new = map(os.fsencode, sys.argv[1:])
+for path in (pathlib.Path(sys.argv[1]) / "bin").iterdir():
+    if path.is_symlink() or not path.is_file():
+        continue
+    content = path.read_bytes()
+    if b"\0" not in content and old in content:
+        content.decode("utf-8")  # Recusa formato desconhecido, em vez de corromper.
+        path.write_bytes(content.replace(old, new))
+PY_RELOCATE
 
-# Inicia a nova versão.
-exec "$PYTHON" "$INSTALL_DIR/baseus_app.py"
+printf 'READY\n' > "$PREPARED_FILE"
+PREPARED=true
+
+echo "⏳ Aguardando o aplicativo encerrar..."
+remaining=60
+while kill -0 "$PID" 2>/dev/null; do
+    sleep 0.5
+    remaining=$((remaining - 1))
+    if [[ $remaining -le 0 ]]; then
+        echo "❌ O aplicativo não encerrou dentro do prazo."
+        exit 1
+    fi
+done
+
+# Recuperar antes deste ponto alteraria arquivos usados pelo aplicativo aberto.
+if [[ -f "$STATE_FILE" && -d "$BACKUP_DIR" ]]; then
+    echo "⚠️ Recuperando uma atualização anterior interrompida..."
+    rm -rf -- "$INSTALL_DIR"
+    mv "$BACKUP_DIR" "$INSTALL_DIR"
+    rm -f -- "$STATE_FILE"
+fi
+
+PREVIOUS_VERSION="desconhecida"
+if [[ -f "$INSTALL_DIR/version" ]]; then
+    PREVIOUS_VERSION="$(tr -d '[:space:]' < "$INSTALL_DIR/version")"
+fi
+
+echo "🔄 Ativando a nova versão..."
+rm -rf -- "$BACKUP_DIR"
+# O estado só passa a existir depois de remover qualquer backup obsoleto.
+printf 'pending\ntarget=%s\nprevious=%s\n' \
+    "$VERSION" "$PREVIOUS_VERSION" > "$STATE_FILE"
+mv "$INSTALL_DIR" "$BACKUP_DIR"
+
+if ! mv "$STAGING_DIR" "$INSTALL_DIR"; then
+    mv "$BACKUP_DIR" "$INSTALL_DIR"
+    rm -f -- "$STATE_FILE"
+    echo "❌ Falha ao ativar o staging; a versão anterior foi restaurada."
+    exit 1
+fi
+
+# A aplicação escreve seu PID neste arquivo no primeiro ciclo do event loop.
+( exec 9>&-; exec env BASEUS_UPDATE_READY_FILE="$STARTUP_READY_FILE" \
+    "$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/baseus_app.py" ) &
+new_pid=$!
+
+remaining=60
+while [[ "$(cat "$STARTUP_READY_FILE" 2>/dev/null || true)" != "$new_pid" ]] && kill -0 "$new_pid" 2>/dev/null; do
+    sleep 0.5
+    remaining=$((remaining - 1))
+    if [[ $remaining -le 0 ]]; then
+        break
+    fi
+done
+
+if [[ "$(cat "$STARTUP_READY_FILE" 2>/dev/null || true)" == "$new_pid" ]] &&
+   kill -0 "$new_pid" 2>/dev/null; then
+    rm -rf -- "$BACKUP_DIR"
+    rm -f -- "$STATE_FILE"
+    echo "✅ Atualização para v$VERSION concluída com sucesso."
+    exit 0
+fi
+
+echo "⚠️ A nova versão não confirmou a inicialização; restaurando a anterior."
+if kill -0 "$new_pid" 2>/dev/null; then
+    kill "$new_pid" 2>/dev/null || true
+    remaining=10
+    while kill -0 "$new_pid" 2>/dev/null && [[ $remaining -gt 0 ]]; do
+        sleep 0.2
+        remaining=$((remaining - 1))
+    done
+    if kill -0 "$new_pid" 2>/dev/null; then
+        kill -KILL "$new_pid" 2>/dev/null || true
+    fi
+    wait "$new_pid" 2>/dev/null || true
+fi
+rm -rf -- "$INSTALL_DIR"
+mv "$BACKUP_DIR" "$INSTALL_DIR"
+rm -f -- "$STATE_FILE"
+( exec 9>&-; exec "$INSTALL_DIR/.venv/bin/python" \
+    "$INSTALL_DIR/baseus_app.py" >/dev/null 2>&1 ) &
+echo "✓ Rollback concluído e versão anterior reiniciada."
+exit 1

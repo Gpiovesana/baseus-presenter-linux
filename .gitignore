@@ -22,3 +22,4 @@ _corrigidos/
 .vscode/
 *.swp
 .DS_Store
+:memory:.ses

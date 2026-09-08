@@ -182,6 +182,8 @@ class PointerWindow(QMainWindow):
         log.debug("Tela limpa (Pincel apagado via Smart Eraser).")
 
     def set_recording(self, state):
+        if self.is_recording == state:
+            return
         self.is_recording = state
         self.show_subtitle(
             "[GRAVANDO]" if state else "[PAUSADO]", duration=2000)

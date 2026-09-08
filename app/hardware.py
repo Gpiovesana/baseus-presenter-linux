@@ -1,5 +1,6 @@
 # ~/Documentos/Projetos/baseus-presenter-linux/app/hardware.py
 import os
+import re
 import time
 import select
 from PyQt5.QtCore import QThread, pyqtSignal
@@ -95,11 +96,21 @@ class HardwareReader(QThread):
             if self.kbd: self.kbd.ungrab()
         except Exception as exc:
             log.warning(f"Erro ao liberar kbd (dispositivo pode ter sido desconectado): {exc}")
+        finally:
+            try:
+                if self.kbd: self.kbd.close()
+            except Exception as exc:
+                log.debug(f"Erro ao fechar kbd: {exc}")
 
         try:
             if self.mouse_ev: self.mouse_ev.ungrab()
         except Exception as exc:
             log.warning(f"Erro ao liberar mouse_ev (dispositivo pode ter sido desconectado): {exc}")
+        finally:
+            try:
+                if self.mouse_ev: self.mouse_ev.close()
+            except Exception as exc:
+                log.debug(f"Erro ao fechar mouse_ev: {exc}")
 
     def _close_fds(self):
         for fd in list(self.fds.keys()):
@@ -140,7 +151,18 @@ class HardwareReader(QThread):
             if os.path.exists(path):
                 try:
                     with open(path, 'r') as f:
-                        if self.vendor_id_str in f.read().upper():
+                        uevent = f.read()
+                        # O kernel publica HID_ID como bus:vendor:product.
+                        # Ler exclusivamente esse campo evita falso positivo
+                        # em outros atributos do uevent que contenham os IDs.
+                        hid_id = re.search(
+                            r"(?mi)^HID_ID\s*=\s*([0-9a-f]+):([0-9a-f]+):([0-9a-f]+)\s*$",
+                            uevent,
+                        )
+                        if hid_id and (
+                            int(hid_id.group(2), 16) == int(self.vendor_id_hex, 16)
+                            and int(hid_id.group(3), 16) == int(self.product_id_hex, 16)
+                        ):
                             node = f"/dev/{nome}"
                             self.fds[os.open(node, os.O_RDONLY | os.O_NONBLOCK)] = node
                             log.info(f"Conexão Baseus estabelecida: {node}")
@@ -175,9 +197,27 @@ class HardwareReader(QThread):
             p_id = int(self.product_id_hex, 16)
             for path in list_devices():
                 dev = InputDevice(path)
-                if dev.info.vendor == v_id and dev.info.product == p_id:
-                    if 'Keyboard' in dev.name: self.kbd = dev
-                    elif 'Mouse' in dev.name: self.mouse_ev = dev
+                if dev.info.vendor != v_id or dev.info.product != p_id:
+                    # InputDevice abre um FD no construtor; não deixe aberto
+                    # um periférico que não pertence ao passador.
+                    try: dev.close()
+                    except Exception: pass
+                    continue
+                if 'Keyboard' in dev.name:
+                    if self.kbd:
+                        try: self.kbd.close()
+                        except Exception: pass
+                    self.kbd = dev
+                elif 'Mouse' in dev.name:
+                    if self.mouse_ev:
+                        try: self.mouse_ev.close()
+                        except Exception: pass
+                    self.mouse_ev = dev
+                else:
+                    # Mesmo vendor/product, mas interface sem papel usado
+                    # pelo virtualizador.
+                    try: dev.close()
+                    except Exception: pass
 
             if self.kbd and self.mouse_ev:
                 # #11: se UInput.from_device() falhar (ex.: sem permissão em
@@ -197,6 +237,9 @@ class HardwareReader(QThread):
                         try: dev_grabbed.ungrab()
                         except Exception as exc_ungrab:
                             log.warning(f"Falha ao desfazer grab: {exc_ungrab}")
+                        try: dev_grabbed.close()
+                        except Exception as exc_close:
+                            log.debug(f"Falha ao fechar dispositivo após rollback: {exc_close}")
                     self.ui = None
                     self.kbd = None
                     self.mouse_ev = None
@@ -211,6 +254,11 @@ class HardwareReader(QThread):
                     f"(kbd={bool(self.kbd)}, mouse={bool(self.mouse_ev)}). "
                     "Giroscópio desativado até as duas aparecerem."
                 )
+                for dev in (self.kbd, self.mouse_ev):
+                    try:
+                        if dev: dev.close()
+                    except Exception:
+                        pass
                 self.kbd = None
                 self.mouse_ev = None
         except PermissionError as exc:

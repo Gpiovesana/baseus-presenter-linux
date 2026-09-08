@@ -30,6 +30,7 @@ class FakeDevice:
         self.grab_fails = grab_fails
         self.grabbed = False
         self.ungrab_count = 0
+        self.close_count = 0
         self.info = mock.Mock(vendor=vendor, product=product)
 
     def grab(self):
@@ -40,6 +41,9 @@ class FakeDevice:
     def ungrab(self):
         self.ungrab_count += 1
         self.grabbed = False
+
+    def close(self):
+        self.close_count += 1
 
 
 class FakeUInput:
@@ -84,6 +88,8 @@ class TestRollbackDeGrabs(unittest.TestCase):
         self.assertFalse(mouse.grabbed, "mouse ficou capturado após falha do UInput")
         self.assertGreaterEqual(kbd.ungrab_count, 1)
         self.assertGreaterEqual(mouse.ungrab_count, 1)
+        self.assertGreaterEqual(kbd.close_count, 1)
+        self.assertGreaterEqual(mouse.close_count, 1)
         self.assertIsNone(reader.ui)
 
 
@@ -185,6 +191,47 @@ class TestEnumeracaoDinamicaHidraw(unittest.TestCase):
             reader._scan_devices()  # não deve levantar
         self.assertEqual(reader.fds, {})
 
+    def test_exige_vendor_e_product_do_passador(self):
+        reader = hw.HardwareReader()
+        nodes = ["hidraw0", "hidraw1", "hidraw2"]
+        contents = {
+            "/sys/class/hidraw/hidraw0/device/uevent":
+                "HID_ID=0003:0000ABC8:00001234\n",
+            "/sys/class/hidraw/hidraw1/device/uevent":
+                "HID_ID=0003:00005678:0000CA08\n",
+            "/sys/class/hidraw/hidraw2/device/uevent":
+                "HID_ID=0003:0000ABC8:0000CA08\n",
+        }
+
+        def fake_exists(path):
+            return path in contents
+
+        def fake_open(path, *args, **kwargs):
+            return mock.mock_open(read_data=contents[path]).return_value
+
+        with mock.patch.object(hw, "EVDEV_AVAILABLE", False), \
+             mock.patch.object(hw.os, "listdir", return_value=nodes), \
+             mock.patch.object(hw.os.path, "exists", side_effect=fake_exists), \
+             mock.patch("builtins.open", side_effect=fake_open), \
+             mock.patch.object(hw.os, "open", return_value=99) as mock_open_fd:
+            reader._scan_devices()
+
+        self.assertEqual(reader.fds, {99: "/dev/hidraw2"})
+        mock_open_fd.assert_called_once_with("/dev/hidraw2", mock.ANY)
+
+    def test_ignora_ids_fora_do_campo_hid_id(self):
+        reader = hw.HardwareReader()
+        with mock.patch.object(hw, "EVDEV_AVAILABLE", False), \
+             mock.patch.object(hw.os, "listdir", return_value=["hidraw0"]), \
+             mock.patch.object(hw.os.path, "exists", return_value=True), \
+             mock.patch("builtins.open", mock.mock_open(read_data=(
+                 "HID_ID=0003:00001111:00002222\n"
+                 "ID_VENDOR_ID=abc8\nID_MODEL_ID=ca08\n"))), \
+             mock.patch.object(hw.os, "open") as mock_open_fd:
+            reader._scan_devices()
+
+        mock_open_fd.assert_not_called()
+
 
 class TestIdsDoConfig(unittest.TestCase):
     """IDs de hardware vindos do config em vez de hardcoded."""
@@ -200,6 +247,20 @@ class TestIdsDoConfig(unittest.TestCase):
         self.assertEqual(reader.vendor_id_hex, "1234")
         self.assertEqual(reader.product_id_hex, "5678")
         self.assertEqual(reader.vendor_id_str, "1234")
+
+    def test_fecha_dispositivos_evdev_nao_selecionados(self):
+        reader = hw.HardwareReader()
+        other = FakeDevice("Other", fd=12, vendor=0x1111, product=0x2222)
+        unused = FakeDevice("Baseus Consumer", fd=13)
+        with mock.patch.object(hw, "EVDEV_AVAILABLE", True), \
+             mock.patch.object(hw, "list_devices", return_value=["/dev/input/event12", "/dev/input/event13"]), \
+             mock.patch.object(hw, "InputDevice", side_effect=[other, unused]), \
+             mock.patch.object(hw, "UInput") as mock_uinput, \
+             mock.patch.object(hw.os, "listdir", return_value=[]):
+            reader._scan_devices()
+
+        self.assertEqual(other.close_count, 1)
+        self.assertEqual(unused.close_count, 1)
 
     def test_sem_config_usa_defaults(self):
         reader = hw.HardwareReader()

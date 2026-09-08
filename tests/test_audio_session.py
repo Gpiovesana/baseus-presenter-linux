@@ -68,7 +68,10 @@ class TestValidacaoAntesDeGravar(AudioTestCase):
     def test_sem_modelo_nao_ativa_gravacao(self):
         thread = self.make_thread()
         thread.model = None
+        errors = []
+        thread.audio_error.connect(errors.append)
         thread.set_recording(True)
+        self.assertEqual(len(errors), 1)
         self.assertFalse(thread.is_recording)
         self.assertIsNone(thread.txt_path)
 
@@ -122,6 +125,22 @@ class TestFinalizacaoAoPausar(AudioTestCase):
         self.assertTrue(recognizer.reset_called)
         self.assertFalse(thread._pending_finalize)
 
+    def test_finalize_preserva_resultados_completos_e_fala_final(self):
+        recognizer = mock.Mock()
+        recognizer.AcceptWaveform.side_effect = [True, False, True]
+        recognizer.Result.side_effect = ['{"text": "primeira frase"}', '{"text": "segunda frase"}']
+        recognizer.FinalResult.return_value = '{"text": "fala final"}'
+        thread = self.make_thread(recognizer=recognizer)
+        thread.set_recording(True)
+        path = thread.txt_path
+        for chunk in (b"a", b"b", b"c"):
+            thread.q.put(chunk)
+        thread.set_recording(False)
+        thread._finalize_pending_utterance()
+        with open(path, encoding="utf-8") as output:
+            self.assertTrue(output.read().endswith("primeira frase\nsegunda frase\nfala final\n"))
+        self.assertEqual(recognizer.Result.call_count, 2)
+
     def test_finalize_sem_texto_nao_escreve_nada_extra(self):
         recognizer = FakeRecognizer(final_text="")
         thread = self.make_thread(recognizer=recognizer)
@@ -156,6 +175,34 @@ class TestFinalizacaoAoPausar(AudioTestCase):
 
         with open(txt_path_sessao, encoding="utf-8") as f:
             self.assertIn("ultima frase", f.read())
+
+
+class TestEncerramentoEArquivos(AudioTestCase):
+    def test_sessoes_no_mesmo_instante_preservam_arquivo_anterior(self):
+        import datetime
+        thread = self.make_thread()
+        with mock.patch("app.audio.datetime") as clock:
+            clock.datetime.now.return_value = datetime.datetime(2026, 1, 1)
+            thread.set_recording(True)
+            first = thread.txt_path
+            with open(first, "a", encoding="utf-8") as output:
+                output.write("fala anterior\n")
+            thread.set_recording(False)
+            thread._finalize_pending_utterance()
+            thread.set_recording(True)
+        self.assertNotEqual(first, thread.txt_path)
+        with open(first, encoding="utf-8") as output:
+            self.assertIn("fala anterior", output.read())
+
+    def test_saida_do_loop_finaliza_fala_pendente(self):
+        thread = self.make_thread(recognizer=FakeRecognizer(final_text="ultima fala"))
+        thread.set_recording(True)
+        path = thread.txt_path
+        thread.set_recording(False)
+        thread.running = False
+        thread.run()
+        with open(path, encoding="utf-8") as output:
+            self.assertIn("ultima fala", output.read())
 
 
 class TestSemMisturaEntreSessoes(AudioTestCase):

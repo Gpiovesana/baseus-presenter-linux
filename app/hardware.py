@@ -216,10 +216,10 @@ class HardwareReader(QThread):
         except PermissionError as exc:
             log.error(
                 f"Sem permissão para acessar os dispositivos evdev ({exc}). "
-                "Adicione seu usuário ao grupo 'input' ou instale a regra udev."
+                "Verifique as regras udev e reconecte o passador."
             )
             self.permission_error.emit(
-                "⚠️ Sem permissão no giroscópio! Verifique o grupo 'input'."
+                "⚠️ Sem permissão no giroscópio! Verifique as regras udev."
             )
         except Exception as exc:
             log.exception(f"Erro no giroscópio: {exc}")

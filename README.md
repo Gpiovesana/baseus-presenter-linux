@@ -106,7 +106,7 @@ Sugestões, issues e pull requests são muito bem-vindos! Sinta-se à vontade pa
 
 # 🇺🇸 English
 
-> ❗The application interface is currently available in Portuguese. Automatic interface localization is planned for a future release.
+> ❗ The application interface is currently available in Portuguese. Automatic interface localization is planned for a future release.
 # Baseus Presenter for Linux 🚀
 
 An unofficial open-source software that unlocks and expands all features of the Baseus Orange Dot AI slide presenter on Linux. Built with PyQt5, this project transforms your presenter into a complete tool for teachers, speakers, and content creators, bringing visual tools, offline voice transcription, and real-time simultaneous translation.

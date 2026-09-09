@@ -181,6 +181,24 @@ cat install.sh
 bash install.sh
 ```
 
+## Uninstallation
+
+Open **Configurações → Geral → Desinstalar Baseus Presenter…** (Settings → General
+→ Uninstall Baseus Presenter), or search for **Desinstalar Baseus Presenter** in
+your applications menu. The interface labels are currently in Portuguese.
+The terminal first displays a warning: you must type `DESINSTALAR` to continue.
+Pressing Enter or closing the terminal cancels. Your administrator password is
+requested only to remove the USB permission rule.
+
+The application exits before removal. The entire installation folder, virtual
+environment, shortcuts, and autostart entry are removed. Settings, models, and
+transcripts outside the installation folder are preserved; personal files inside
+it are also deleted. Removed files are not sent to the Trash.
+Uninstallation is disabled in development Git checkouts.
+
+If needed, run `bash ~/BaseusPresenter/uninstall.sh` (adjust the path if you
+installed it elsewhere). The same confirmation warning will appear.
+
 ## ⚙️ How to use
 * Start the program: You can start it via terminal by running ~/BaseusPresenter/.venv/bin/python3 ~/BaseusPresenter/baseus_app.py.
 

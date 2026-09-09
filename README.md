@@ -20,7 +20,8 @@ Um software open-source não-oficial que desbloqueia e expande todas as funciona
 
 > ⚠️ **Aviso Legal:** Este é um projeto de código aberto independente. Não possui nenhuma afiliação, endosso, patrocínio ou vínculo comercial com a marca Baseus.
 
-> 🐧 Compatibilidade: Testado no Zorin OS. Projetado para distribuições Linux baseadas em Debian/Ubuntu. Testes da comunidade em outras distribuições são bem-vindos.
+> 🐧 **Compatibilidade:** Testado no Zorin OS. Projetado para distribuições Linux baseadas em Debian/Ubuntu. Testes da comunidade em outras distribuições são bem-vindos.
+
 ## ✨ Funcionalidades
 
 * **Ferramentas Visuais de Apresentação:**
@@ -112,7 +113,8 @@ An unofficial open-source software that unlocks and expands all features of the 
 
 > ⚠️ **Disclaimer:** This is an independent open-source project. It has no affiliation, endorsement, sponsorship, or commercial tie with the Baseus brand.
 
-> 🐧 Compatibility: Tested on Zorin OS. Designed for Debian/Ubuntu-based Linux distributions. Community testing on other distributions is welcome.
+> 🐧 **Compatibility:** Tested on Zorin OS. Designed for Debian/Ubuntu-based Linux distributions. Community testing on other distributions is welcome.
+
 ## ✨ Features
 * **Visual Presentation Tools:**
 

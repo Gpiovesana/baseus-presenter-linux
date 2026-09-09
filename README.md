@@ -11,6 +11,8 @@
 
 # 🇧🇷 Português
 
+> ❗ A interface atual é somente em português. Futuras atualizações poderão incluir traduções
+
 
 # Baseus Presenter para Linux 🚀
 
@@ -37,7 +39,7 @@ Um software open-source não-oficial que desbloqueia e expande todas as funciona
 
 **Opção 1: Instalação Rápida (1 linha):**
 
-Abra o terminal e cole o comando abaixo. O instalador consulta a API do GitHub e instala a última release estável publicada (rascunhos e pré-releases são ignorados). Ele prepara o código e o ambiente virtual antes de substituir uma instalação existente, que é restaurada se a ativação falhar. O merge na `main` publica este instalador, mas não cria uma release: para distribuir uma nova versão do aplicativo, publique uma tag/release que contenha esse código.
+Abra o terminal e cole o comando abaixo. O instalador consulta a API do GitHub e instala a última release estável publicada (rascunhos e pré-releases são ignorados).
 
 ```bash
 wget -qO- https://raw.githubusercontent.com/Gpiovesana/baseus-presenter-linux/main/install.sh | bash
@@ -54,13 +56,10 @@ cat install.sh
 # Execute o instalador
 bash install.sh
 ```
-(Independente do método, reinicie o computador após a instalação para aplicar as permissões do grupo de segurança).
 
 
 ## ⚙️ Como usar
 * Inicie o programa: Você pode iniciá-lo pelo terminal rodando `~/BaseusPresenter/.venv/bin/python3 ~/BaseusPresenter/baseus_app.py`.
-
-  (Certifique-se de reiniciar o computador após a instalação para que o sistema aplique as novas permissões do grupo de segurança).
 
 * Ícone na Bandeja: Um ícone vermelho aparecerá perto do relógio do sistema. Clique com o botão direito para abrir as Configurações.
 
@@ -77,9 +76,9 @@ bash install.sh
 
 * Botão do Laser (Segurar): Ativa a ferramenta visual selecionada (Laser, Lupa ou Spotlight).
 
-* Botão de Microfone (Clique simples): Inicia/Pausa a gravação da transcrição para o arquivo de texto.
+* Botão de Microfone (Clique simples): Inicia/encerra a gravação da transcrição para o arquivo de texto.
 
-* Botão de Tradução (Clique simples): Inicia/Pausa as legendas com tradução simultânea na tela.
+* Botão de Tradução (Clique simples): Inicia/encerra as legendas com tradução simultânea na tela.
 
 * Botão de Risco (Segurar): Ativa o pincel para desenhar livremente na tela.
 
@@ -104,6 +103,8 @@ Sugestões, issues e pull requests são muito bem-vindos! Sinta-se à vontade pa
 
 
 # 🇺🇸 English
+
+> ❗The application interface is currently available in Portuguese. Automatic interface localization is planned for a future release.
 # Baseus Presenter for Linux 🚀
 
 An unofficial open-source software that unlocks and expands all features of the Baseus Orange Dot AI slide presenter on Linux. Built with PyQt5, this project transforms your presenter into a complete tool for teachers, speakers, and content creators, bringing visual tools, offline voice transcription, and real-time simultaneous translation.
@@ -140,7 +141,7 @@ An unofficial open-source software that unlocks and expands all features of the 
 ## 📥 Installation
 
 **Option 1: Quick Install (1 line)**
-Open the terminal and paste the command below. The installer queries the GitHub API and installs the latest published stable release (drafts and pre-releases are ignored). It prepares the code and virtual environment before replacing an existing installation, which is restored if activation fails. Merging into `main` publishes this installer, but does not create a release: to distribute a new application version, publish a tag/release containing that code.
+Open the terminal and paste the command below. The installer queries the GitHub API and installs the latest published stable release (drafts and pre-releases are ignored). 
 
 ```bash
 wget -qO- https://raw.githubusercontent.com/Gpiovesana/baseus-presenter-linux/main/install.sh | bash
@@ -158,8 +159,6 @@ cat install.sh
 # Run the installer
 bash install.sh
 ```
-
-(Regardless of the method, restart your computer after installation to apply the security group permissions).
 
 ## ⚙️ How to use
 * Start the program: You can start it via terminal by running ~/BaseusPresenter/.venv/bin/python3 ~/BaseusPresenter/baseus_app.py.
@@ -179,9 +178,9 @@ bash install.sh
 
 * Laser Button (Hold): Activates the selected visual tool (Laser, Magnifier, or Spotlight).
 
-* Microphone Button (Single click): Starts/Pauses the transcription recording to the text file.
+* Microphone Button (Single click): Starts/stops the transcription recording to the text file.
 
-* Translation Button (Single click): Starts/Pauses on-screen simultaneous translation subtitles.
+* Translation Button (Single click): Starts/stops on-screen simultaneous translation subtitles.
 
 * Draw Button (Hold): Activates the pen to draw freely on the screen.
 

@@ -182,6 +182,7 @@ def main():
     # Limpeza ao sair
     def cleanup():
         log.info("Encerrando threads...")
+        settings_gui.flush_pending_save()
         updater.stop()
         settings_gui.stop_threads()
         hardware.stop()

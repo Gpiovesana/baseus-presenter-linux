@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import tempfile
+from pathlib import Path
 import urllib.error
 import urllib.request
 
@@ -36,8 +37,8 @@ def read_local_version():
 
 def normalize_version(version):
     """Transforma v2.1.0 / 2.1.0 em uma tupla comparável."""
-    version = version.strip().lstrip("v")
-    match = re.match(r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?", version)
+    version = version.strip().removeprefix("v")
+    match = re.fullmatch(r"(\d+)(?:\.(\d+))?(?:\.(\d+))?", version)
     if not match:
         return (0, 0, 0)
     return tuple(int(x or 0) for x in match.groups())
@@ -166,15 +167,27 @@ class UpdateChecker(QObject):
 
 def start_update_process(version_tag):
     """Prepara a atualização e só encerra o app quando o staging estiver pronto."""
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    base_dir = os.path.realpath(os.path.dirname(os.path.dirname(__file__)))
+    # .git também pode ser um arquivo (git worktree). Verifica ancestrais
+    # para proteger projetos instalados em uma subpasta de um checkout.
+    root = Path(base_dir)
+    if any((path / ".git").is_file() or (path / ".git/HEAD").is_file()
+           or (path / ".git").is_symlink() for path in (root, *root.parents)):
+        QMessageBox.warning(
+            None, "Atualização indisponível",
+            "Esta cópia está em um checkout de desenvolvimento. "
+            "Atualize pelo Git ou use uma instalação separada do aplicativo.",
+        )
+        return False
     updater_script = os.path.join(base_dir, "updater.sh")
 
     if not os.path.exists(updater_script):
         log.error("Script de atualização (updater.sh) não encontrado na raiz!")
         return
 
-    version = version_tag.strip().lstrip("v")
-    if not re.fullmatch(r"\d+(?:\.\d+){0,2}", version):
+    tag = version_tag.strip()
+    version = tag.removeprefix("v")
+    if not re.fullmatch(r"v?\d+(?:\.\d+){0,2}", tag):
         log.error(f"Versão de atualização inválida: {version_tag!r}")
         QMessageBox.warning(None, "Erro de Atualização", "A versão informada pela atualização é inválida.")
         return False
@@ -201,7 +214,7 @@ def start_update_process(version_tag):
     # sem atualização. Só chamamos app.quit() se o processo realmente subiu.
     try:
         process = subprocess.Popen(
-            ["bash", updater_script, version, str(os.getpid()), status_file],
+            ["bash", updater_script, tag, str(os.getpid()), status_file],
             cwd=base_dir,
             stdout=log_stream,
             stderr=subprocess.STDOUT,

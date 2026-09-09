@@ -49,8 +49,10 @@ os.execv({sys.executable!r}, [{sys.executable!r}] + sys.argv[1:])
         self.executable(old_python, runner)
         (self.install / "version").write_text("1.0.0\n")
         (self.install / "baseus_app.py").write_text(
-            "import os, pathlib\npathlib.Path(os.environ['TEST_UPDATE_ROOT'], 'rollback').write_text('restarted')\n")
+            "import os, pathlib\n"
+            "pathlib.Path(os.environ['TEST_UPDATE_ROOT'], 'rollback').write_text(os.getcwd())\n")
         self.executable(self.bin / "curl", '''#!/bin/sh
+printf '%s\\n' "$@" > "$TEST_UPDATE_ROOT/curl-args"
 if [ -n "$FAIL_DOWNLOAD" ]; then exit 22; fi
 while [ "$#" -gt 0 ]; do
     if [ "$1" = '-o' ]; then shift; cp "$FAKE_RELEASE" "$1"; exit; fi
@@ -72,6 +74,7 @@ assert pathlib.Path(str(root / 'installation') + '_backup').is_dir()
 pathlib.Path(os.environ['BASEUS_UPDATE_READY_FILE']).write_text(str(os.getpid()))
 (root / 'started').write_text('ready')
 time.sleep(1)
+(root / 'startup-cwd').write_text(os.getcwd())
 '''
 
     def executable(self, path, text):
@@ -86,7 +89,7 @@ time.sleep(1)
         self.env["FAKE_RELEASE"] = str(archive)
         return subprocess.run(
             ["bash", str(ROOT / "updater.sh"), "2.0.0", pid, str(self.status)],
-            env=self.env, text=True, capture_output=True, timeout=15)
+            env=self.env, cwd=self.install, text=True, capture_output=True, timeout=15)
 
     def test_download_failure_preserves_installation(self):
         self.env["FAIL_DOWNLOAD"] = "1"
@@ -107,7 +110,9 @@ time.sleep(1)
         result = self.run_update()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual((self.install / "version").read_text(), "2.0.0\n")
+        self.assertIn("/tags/2.0.0.tar.gz", (self.root / "curl-args").read_text())
         self.assertTrue((self.root / "started").exists())
+        self.assertEqual((self.root / "startup-cwd").read_text(), str(self.install))
         entry = self.install / ".venv/bin/entrypoint"
         self.assertTrue(entry.read_text().startswith("#!" + str(self.install / ".venv/bin/python")))
         self.assertNotIn("_staging", entry.read_text())
@@ -129,6 +134,7 @@ time.sleep(1)
         while not (self.root / "rollback").exists() and time.monotonic() < deadline:
             time.sleep(0.01)
         self.assertTrue((self.root / "rollback").exists(), result.stdout + result.stderr)
+        self.assertEqual((self.root / "rollback").read_text(), str(self.install))
         self.assertFalse(self.state.exists())
 
     def test_lock_rejects_concurrent_update(self):
@@ -139,6 +145,46 @@ time.sleep(1)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("andamento", result.stdout)
         self.assertEqual((self.install / "version").read_text(), "1.0.0\n")
+
+    def test_activation_failure_restarts_restored_app_in_correct_directory(self):
+        import shutil
+        import time
+        real_mv = shutil.which("mv")
+        self.executable(self.bin / "mv", f'''#!/bin/sh
+if [ "$1" = "${{BASEUS_INSTALL_DIR}}_staging" ]; then exit 18; fi
+exec "{real_mv}" "$@"
+''')
+        result = self.run_update()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.install / "version").read_text(), "1.0.0\n")
+        deadline = time.monotonic() + 2
+        while not (self.root / "rollback").exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual((self.root / "rollback").read_text(), str(self.install))
+        self.assertFalse(self.state.exists())
+
+    def test_checkout_and_worktree_preserve_files(self):
+        for kind in ("directory", "file", "ancestor"):
+            with self.subTest(kind=kind):
+                git = (self.root if kind == "ancestor" else self.install) / ".git"
+                if kind == "directory":
+                    git.mkdir()
+                    (git / "HEAD").write_text("ref: refs/heads/dev")
+                else:
+                    git.write_text("gitdir: /some/worktree")
+                self.env["FAIL_DOWNLOAD"] = "1"
+                result = self.run_update()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("checkout", result.stdout)
+                self.assertTrue(git.exists())
+                self.assertEqual((self.install / "version").read_text(), "1.0.0\n")
+                self.assertFalse(self.lock.exists())
+                self.assertFalse(self.status.exists())
+                if git.is_dir():
+                    (git / "HEAD").unlink()
+                    git.rmdir()
+                else:
+                    git.unlink()
 
     def test_recovery_does_not_touch_running_installation(self):
         # Falha antes do READY, com backup/estado pré-existentes e app vivo.

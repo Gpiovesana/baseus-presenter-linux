@@ -50,6 +50,9 @@ class TestRecordingWiring(unittest.TestCase):
                 audio._fail_active_recording("falha de escrita")
                 self.assertFalse(overlay.is_recording)
                 self.assertEqual(overlay.subtitle_text, "falha de escrita")
+                # Bandeja/atualizador encerram pelo QApplication, sem closeEvent.
+                app_type.return_value.aboutToQuit.connect.call_args.args[0]()
+                gui_type.return_value.flush_pending_save.assert_called_once_with()
                 return 0
 
             with mock.patch.dict(os.environ, {"BASEUS_UPDATE_READY_FILE": ready_path}), \
@@ -59,7 +62,7 @@ class TestRecordingWiring(unittest.TestCase):
                  mock.patch.object(baseus_app, "HardwareReader", return_value=hardware), \
                  mock.patch.object(baseus_app, "AudioThread", return_value=audio), \
                  mock.patch.object(baseus_app, "PointerWindow", return_value=overlay), \
-                 mock.patch.object(baseus_app, "MainWindow"), \
+                 mock.patch.object(baseus_app, "MainWindow") as gui_type, \
                  mock.patch.object(baseus_app, "TrayIcon"), \
                  mock.patch.object(baseus_app, "UpdateChecker"), \
                  mock.patch.object(hardware, "start"), \

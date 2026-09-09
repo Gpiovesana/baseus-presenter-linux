@@ -8,7 +8,7 @@ import threading
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QSlider, QComboBox, QPushButton, QSystemTrayIcon, QMenu,
                              qApp, QTabWidget, QColorDialog, QFileDialog, QFormLayout, QInputDialog, QMessageBox, QCheckBox, QProgressDialog, QStyle)
-from PyQt5.QtCore import Qt, pyqtSignal, QThread
+from PyQt5.QtCore import Qt, pyqtSignal, QThread, QTimer
 from PyQt5.QtGui import QColor, QIcon, QPixmap, QPainter, QPen
 import sounddevice as sd
 
@@ -23,6 +23,8 @@ from .logger import get_logger
 from .config import Config
 
 log = get_logger(__name__)
+
+SAVE_DEBOUNCE_MS = 400
 
 # Sentinela para distinguir "ainda não carregado" de "microfone padrão do
 # sistema" (que é representado por None no combo_mic).
@@ -140,6 +142,10 @@ class MainWindow(QMainWindow):
         # Mesmo padrão de overlay.py/audio.py: aceita tanto o dict cru quanto
         # o wrapper já embrulhado, para não depender de quem instancia primeiro.
         self.config = config if isinstance(config, Config) else Config(config)
+        self._save_timer = QTimer(self)
+        self._save_timer.setSingleShot(True)
+        self._save_timer.setInterval(SAVE_DEBOUNCE_MS)
+        self._save_timer.timeout.connect(self._save_now)
         self.setWindowTitle("Baseus Presenter - Configurações (v2.0)")
         self.setWindowIcon(QIcon.fromTheme("input-mouse"))
         self.setMinimumWidth(550)
@@ -352,7 +358,7 @@ class MainWindow(QMainWindow):
         # Sem isso, a troca de perfil só existia em memória: fechar o app
         # sem tocar em nenhum slider fazia o active_profile voltar ao
         # valor antigo no próximo boot, porque nunca era salvo em disco.
-        self.config.save()
+        self._save_now()
 
         self.model_changed.emit()
         self.config_updated.emit()
@@ -375,7 +381,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Erro", "Já existe um perfil com esse nome.")
             return
 
-        self.config.save()
+        self._save_now()
         self.populate_profiles_combo()
         self._load_profile_into_widgets()
         self.model_changed.emit()
@@ -396,7 +402,7 @@ class MainWindow(QMainWindow):
             del data["profiles"][current]
             data["active_profile"] = list(data["profiles"].keys())[0]
 
-        self.config.save()
+        self._save_now()
         self.populate_profiles_combo()
         self._load_profile_into_widgets()
         self.model_changed.emit()
@@ -492,7 +498,7 @@ class MainWindow(QMainWindow):
 
         self._sync_input_device()
         self._last_model_path = new_model_path
-        self.config.save()
+        self._save_timer.start()
         self.config_updated.emit()
 
         # save_settings() é chamado por QUALQUER slider/combo (laser, spotlight,
@@ -500,6 +506,16 @@ class MainWindow(QMainWindow):
         # tamanho do laser também dispararia um reload desnecessário do Vosk.
         if model_path_changed:
             self.model_changed.emit()
+
+    def _save_now(self):
+        # A gravação imediata inclui todas as mudanças em memória e substitui
+        # qualquer gravação agendada, evitando uma segunda escrita redundante.
+        self._save_timer.stop()
+        self.config.save()
+
+    def flush_pending_save(self):
+        if self._save_timer.isActive():
+            self._save_now()
 
     # ==========================================
     # LÓGICAS ANTIGAS (Modelos, Cores e Idiomas)
@@ -602,7 +618,7 @@ class MainWindow(QMainWindow):
                     active = data["active_profile"]
                     data["profiles"][active]["audio"]["selected_model_path"] = diretorio
 
-                self.config.save()
+                self._save_now()
                 self._load_profile_into_widgets()
                 self.model_changed.emit()
                 self.config_updated.emit()
@@ -633,7 +649,7 @@ class MainWindow(QMainWindow):
                 if p_data["audio"].get("selected_model_path") == path:
                     p_data["audio"]["selected_model_path"] = ""
 
-        self.config.save()
+        self._save_now()
         self._load_profile_into_widgets()
         self.model_changed.emit()
         self.config_updated.emit()
@@ -643,7 +659,7 @@ class MainWindow(QMainWindow):
         if diretorio:
             self.config.set("save_dir", diretorio)
             self.lbl_txt_path.setText(diretorio)
-            self.config.save()
+            self._save_now()
 
     def populate_languages(self):
         """
@@ -771,6 +787,7 @@ class MainWindow(QMainWindow):
         self._lang_loader = None
 
     def closeEvent(self, event):
+        self.flush_pending_save()
         if self.config.get("close_behavior", "tray") == "tray":
             event.ignore()
             self.hide()

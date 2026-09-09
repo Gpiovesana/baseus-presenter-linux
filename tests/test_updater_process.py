@@ -34,6 +34,38 @@ class FakeTimer:
 
 
 class UpdateProcessTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.install = Path(temporary.name)
+        (self.install / "updater.sh").touch()
+        patcher = mock.patch.object(updater, "__file__", str(self.install / "app/updater.py"))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_checkout_and_worktree_are_blocked_before_starting_process(self):
+        for kind in ("directory", "file", "ancestor"):
+            with self.subTest(kind=kind):
+                git = self.install / ".git"
+                if kind == "directory":
+                    git.mkdir()
+                    (git / "HEAD").write_text("ref: refs/heads/dev")
+                else:
+                    git.write_text("gitdir: /some/worktree")
+                if kind == "ancestor":
+                    (self.install / "nested").mkdir()
+                    updater.__file__ = str(self.install / "nested/app/updater.py")
+                with mock.patch.object(updater.QMessageBox, "warning") as warning, \
+                     mock.patch.object(updater.subprocess, "Popen") as popen:
+                    self.assertFalse(updater.start_update_process("v2.3.0"))
+                popen.assert_not_called()
+                self.assertIn("checkout", warning.call_args.args[2])
+                if git.is_dir():
+                    (git / "HEAD").unlink()
+                    git.rmdir()
+                else:
+                    git.unlink()
+
     def test_waits_for_ready_before_quitting(self):
         with tempfile.TemporaryDirectory() as directory:
             status = Path(directory) / "status"
@@ -51,8 +83,9 @@ class UpdateProcessTests(unittest.TestCase):
                 next(descriptors), str(status if "status" in kw["prefix"] else log_file)
             )), mock.patch.object(updater.QApplication, "instance", return_value=app), \
                  mock.patch.object(updater, "QTimer", return_value=timer), \
+                 mock.patch.object(updater.QMessageBox, "warning") as warning, \
                  mock.patch.object(updater.subprocess, "Popen", return_value=process) as popen:
-                self.assertTrue(updater.start_update_process("v2.3.0"))
+                self.assertTrue(updater.start_update_process("v2.3.0"), warning.call_args)
                 self.assertTrue(timer.started)
                 app.quit.assert_not_called()
                 status.write_text("READY\n", encoding="utf-8")
@@ -60,6 +93,7 @@ class UpdateProcessTests(unittest.TestCase):
 
             app.quit.assert_called_once_with()
             self.assertEqual(popen.call_args.args[0][-1], str(status))
+            self.assertEqual(popen.call_args.args[0][2], "v2.3.0")
 
     def test_rejects_invalid_version(self):
         with mock.patch.object(updater.QMessageBox, "warning") as warning, \
@@ -87,7 +121,7 @@ class UpdateProcessTests(unittest.TestCase):
                  mock.patch.object(updater, "QTimer", return_value=timer), \
                  mock.patch.object(updater.subprocess, "Popen", return_value=process), \
                  mock.patch.object(updater.QMessageBox, "warning") as warning:
-                self.assertTrue(updater.start_update_process("2.3.0"))
+                self.assertTrue(updater.start_update_process("2.3.0"), warning.call_args)
                 status.write_text("ERROR\n", encoding="utf-8")
                 log_file.write_text("download recusado", encoding="utf-8")
                 timer.callback()

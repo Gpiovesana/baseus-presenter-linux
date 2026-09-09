@@ -3,22 +3,41 @@ set -euo pipefail
 
 REPO="Gpiovesana/baseus-presenter-linux"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="${BASEUS_INSTALL_DIR:-$SCRIPT_DIR}"
+INSTALL_DIR="$(realpath -e -- "${BASEUS_INSTALL_DIR:-$SCRIPT_DIR}")"
 BACKUP_DIR="${INSTALL_DIR}_backup"
 STAGING_DIR="${INSTALL_DIR}_staging"
 STATE_FILE="${BASEUS_UPDATE_STATE_FILE:-${INSTALL_DIR}.update-state}"
 LOCK_FILE="${BASEUS_UPDATE_LOCK_FILE:-${INSTALL_DIR}.update-lock}"
 
-VERSION="${1:-}"
+RELEASE_TAG="${1:-}"
 PID="${2:-}"
 PREPARED_FILE="${3:-}"
-VERSION="${VERSION#v}"
+VERSION="${RELEASE_TAG#v}"
 
 if [[ ! "$VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]] ||
    [[ ! "$PID" =~ ^[0-9]+$ ]] || [[ -z "$PREPARED_FILE" ]]; then
     echo "❌ Uso: ./updater.sh <versao> <pid_do_app> <arquivo_de_estado>"
     exit 1
 fi
+
+# Proteção independente da GUI: nunca substitui um checkout, nem um worktree.
+if [[ "$INSTALL_DIR" == / || "$INSTALL_DIR" == "$(realpath -- "$HOME")" ||
+      ! -f "$INSTALL_DIR/baseus_app.py" || ! -f "$INSTALL_DIR/version" ]]; then
+    echo "❌ Diretório de instalação inválido."
+    exit 1
+fi
+CHECK_DIR="$INSTALL_DIR"
+while :; do
+    if [[ -f "$CHECK_DIR/.git" || -f "$CHECK_DIR/.git/HEAD" || -L "$CHECK_DIR/.git" ]]; then
+        echo "❌ Atualização bloqueada em checkout de desenvolvimento. Use o Git."
+        exit 1
+    fi
+    [[ "$CHECK_DIR" == / ]] && break
+    CHECK_DIR="$(dirname -- "$CHECK_DIR")"
+done
+
+# O shell permanece em uma pasta estável durante a troca da instalação.
+cd -- "$(dirname -- "$INSTALL_DIR")"
 
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
@@ -41,7 +60,7 @@ trap cleanup EXIT
 echo "🔄 Preparando Baseus Presenter v$VERSION..."
 echo "📥 Baixando release..."
 curl -sSL -f --connect-timeout 10 --max-time 180 \
-    "https://github.com/$REPO/archive/refs/tags/v$VERSION.tar.gz" \
+    "https://github.com/$REPO/archive/refs/tags/$RELEASE_TAG.tar.gz" \
     -o "$TMP_DIR/release.tar.gz"
 
 echo "📦 Extraindo e validando pacote..."
@@ -126,11 +145,13 @@ if ! mv "$STAGING_DIR" "$INSTALL_DIR"; then
     mv "$BACKUP_DIR" "$INSTALL_DIR"
     rm -f -- "$STATE_FILE"
     echo "❌ Falha ao ativar o staging; a versão anterior foi restaurada."
+    ( exec 9>&-; cd -- "$INSTALL_DIR"; exec "$INSTALL_DIR/.venv/bin/python" \
+        "$INSTALL_DIR/baseus_app.py" >/dev/null 2>&1 ) &
     exit 1
 fi
 
 # A aplicação escreve seu PID neste arquivo no primeiro ciclo do event loop.
-( exec 9>&-; exec env BASEUS_UPDATE_READY_FILE="$STARTUP_READY_FILE" \
+( exec 9>&-; cd -- "$INSTALL_DIR"; exec env BASEUS_UPDATE_READY_FILE="$STARTUP_READY_FILE" \
     "$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/baseus_app.py" ) &
 new_pid=$!
 
@@ -167,7 +188,7 @@ fi
 rm -rf -- "$INSTALL_DIR"
 mv "$BACKUP_DIR" "$INSTALL_DIR"
 rm -f -- "$STATE_FILE"
-( exec 9>&-; exec "$INSTALL_DIR/.venv/bin/python" \
+( exec 9>&-; cd -- "$INSTALL_DIR"; exec "$INSTALL_DIR/.venv/bin/python" \
     "$INSTALL_DIR/baseus_app.py" >/dev/null 2>&1 ) &
 echo "✓ Rollback concluído e versão anterior reiniciada."
 exit 1

@@ -58,7 +58,7 @@ fi
 echo "📦 1/6 Instalando dependências de sistema..."
 sudo apt update
 sudo apt install -y curl python3 python3-venv python3-pip python3-dev build-essential \
-    libportaudio2 portaudio19-dev libxcb-cursor0 libxcb-xinerama0
+    libportaudio2 portaudio19-dev libxcb-cursor0 libxcb-xinerama0 xterm
 
 echo "🛡️ 2/6 Configurando permissões de hardware (udev + uaccess)..."
 sudo tee /etc/udev/rules.d/99-baseus-presenter.rules > /dev/null <<'EOF'
@@ -122,7 +122,7 @@ curl -sS -fL --connect-timeout 10 --max-time 180 \
 mkdir -p "$WORK_DIR/extracted"
 tar -xzf "$WORK_DIR/release.tar.gz" -C "$WORK_DIR/extracted"
 EXTRACTED_DIR="$(find "$WORK_DIR/extracted" -mindepth 1 -maxdepth 1 -type d -print -quit)"
-for file in app baseus_app.py requirements.txt version updater.sh; do
+for file in app app/uninstall.py baseus_app.py requirements.txt version updater.sh uninstall.sh; do
     if [[ -z "$EXTRACTED_DIR" || ! -e "$EXTRACTED_DIR/$file" ]]; then
         echo "❌ ERRO: release inválida: '$file' não encontrado."
         exit 1
@@ -137,8 +137,9 @@ fi
 mkdir -p "$STAGING_DIR"
 cp -a "$EXTRACTED_DIR/app" "$STAGING_DIR/"
 cp "$EXTRACTED_DIR/baseus_app.py" "$EXTRACTED_DIR/requirements.txt" \
-   "$EXTRACTED_DIR/version" "$EXTRACTED_DIR/updater.sh" "$STAGING_DIR/"
-chmod +x "$STAGING_DIR/updater.sh"
+   "$EXTRACTED_DIR/version" "$EXTRACTED_DIR/updater.sh" \
+   "$EXTRACTED_DIR/uninstall.sh" "$STAGING_DIR/"
+chmod +x "$STAGING_DIR/updater.sh" "$STAGING_DIR/uninstall.sh"
 
 echo "🐍 4/6 Preparando ambiente virtual e dependências..."
 python3 -m venv "$STAGING_DIR/.venv"
@@ -234,6 +235,7 @@ if [[ "$ENABLE_AUTOSTART" == true ]]; then
 else
     echo "✓ Inicialização automática desativada (use o menu de aplicativos pra abrir)."
 fi
+python3 "$INSTALL_DIR/app/uninstall.py" --register-desktop "$INSTALL_DIR"
 
 echo ""
 echo "✅ 6/6 INSTALAÇÃO DA RELEASE $RELEASE_TAG CONCLUÍDA!"

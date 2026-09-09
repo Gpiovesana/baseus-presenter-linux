@@ -66,7 +66,7 @@ curl -sSL -f --connect-timeout 10 --max-time 180 \
 echo "📦 Extraindo e validando pacote..."
 tar -xzf "$TMP_DIR/release.tar.gz" -C "$TMP_DIR"
 EXTRACTED_DIR="$(find "$TMP_DIR" -mindepth 1 -maxdepth 1 -type d -print -quit)"
-for file in app baseus_app.py requirements.txt version updater.sh; do
+for file in app app/uninstall.py baseus_app.py requirements.txt version updater.sh uninstall.sh; do
     if [[ ! -e "$EXTRACTED_DIR/$file" ]]; then
         echo "❌ Release inválida: '$file' não encontrado."
         exit 1
@@ -83,8 +83,9 @@ rm -rf -- "$STAGING_DIR"
 mkdir -p "$STAGING_DIR"
 cp -a "$EXTRACTED_DIR/app" "$STAGING_DIR/"
 cp "$EXTRACTED_DIR/baseus_app.py" "$EXTRACTED_DIR/requirements.txt" \
-   "$EXTRACTED_DIR/version" "$EXTRACTED_DIR/updater.sh" "$STAGING_DIR/"
-chmod +x "$STAGING_DIR/updater.sh"
+   "$EXTRACTED_DIR/version" "$EXTRACTED_DIR/updater.sh" \
+   "$EXTRACTED_DIR/uninstall.sh" "$STAGING_DIR/"
+chmod +x "$STAGING_DIR/updater.sh" "$STAGING_DIR/uninstall.sh"
 
 echo "🐍 Preparando dependências em staging..."
 python3 -m venv "$STAGING_DIR/.venv"
@@ -166,6 +167,9 @@ done
 
 if [[ "$(cat "$STARTUP_READY_FILE" 2>/dev/null || true)" == "$new_pid" ]] &&
    kill -0 "$new_pid" 2>/dev/null; then
+    if ! python3 "$INSTALL_DIR/app/uninstall.py" --register-desktop "$INSTALL_DIR"; then
+        echo "⚠️ Não foi possível registrar o atalho de desinstalação; o aplicativo tentará novamente ao abrir."
+    fi
     rm -rf -- "$BACKUP_DIR"
     rm -f -- "$STATE_FILE"
     echo "✅ Atualização para v$VERSION concluída com sucesso."

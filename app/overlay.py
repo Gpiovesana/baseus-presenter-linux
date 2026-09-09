@@ -31,8 +31,13 @@ class PointerWindow(QMainWindow):
     def __init__(self, config):
         super().__init__()
         self.config = config if isinstance(config, Config) else Config(config)
-        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint |
-                            Qt.Tool | Qt.WindowTransparentForInput)
+        flags = (Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint |
+                 Qt.Tool | Qt.WindowTransparentForInput)
+        # Como na v1.1: no X11, o WM não deve reposicionar este overlay
+        # ao aplicar suas regras de janelas. Não aplicar a outros backends.
+        if QApplication.platformName() == "xcb":
+            flags |= Qt.X11BypassWindowManagerHint
+        self.setWindowFlags(flags)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.tela_preta_ativa = False
 
@@ -40,7 +45,8 @@ class PointerWindow(QMainWindow):
         self.current_screen = QApplication.screenAt(self.cursor().pos())
         if not self.current_screen:
             self.current_screen = QApplication.primaryScreen()
-        self.setGeometry(self.current_screen.geometry())
+        self._screen_geometry = self.current_screen.geometry()
+        self.setGeometry(self._screen_geometry)
 
         self.is_drawing = False
         self.modes = ["LASER", "LUPA", "SPOTLIGHT"]
@@ -95,25 +101,46 @@ class PointerWindow(QMainWindow):
 
     def _update_overlay(self):
         """Rastreia o mouse e pula de monitor se necessário"""
+        self._sync_screen()
+        self.update()
+
+    def _sync_screen(self):
+        """Sincroniza o destino antes de pintar ou ativar uma ferramenta."""
         screen = QApplication.screenAt(self.cursor().pos())
-        if screen and screen != self.current_screen:
+        if screen is None:
+            return
+        geometry = screen.geometry()
+        changed = screen != self.current_screen
+        if changed or geometry != self._screen_geometry:
             log.debug("Mudança de monitor detectada. Movendo overlay...")
+            # Um gesto contínuo vira segmentos independentes por monitor.
+            # Não juntar pontos de telas diferentes num mesmo traço.
+            resume_pen = changed and self.is_pen_drawing
+            if resume_pen:
+                self.set_pen_active(False)
             self.current_screen = screen
-            self.setGeometry(screen.geometry())
+            self._screen_geometry = geometry
+            self.setGeometry(geometry)
+            self._invalidate_strokes_cache()
+            if resume_pen:
+                self.is_pen_drawing = True
+                self.current_stroke_screen = self._screen_key()
             if hasattr(self, 'screen_pixmap') and self.is_drawing and self.modes[self.mode_index] == "LUPA":
                 self.screen_pixmap = screen.grabWindow(0)
-        self.update()
 
     # --- SLOTS: Funções que recebem os sinais do HardwareReader ---
 
     
     
     def set_active(self, active):
+        if active:
+            self._sync_screen()
         self.is_drawing = active
         if active and self.modes[self.mode_index] == "LUPA":
             self.screen_pixmap = self.current_screen.grabWindow(0)
 
     def switch_mode(self):
+        self._sync_screen()
         self.mode_index = (self.mode_index + 1) % len(self.modes)
         log.info(
             f"Modo do ponteiro alterado para: {self.modes[self.mode_index]}")
@@ -142,6 +169,8 @@ class PointerWindow(QMainWindow):
 
     
     def set_pen_active(self, active):
+        if active:
+            self._sync_screen()
         if active and not self.is_pen_drawing:
             self.current_stroke = []
             self.current_stroke_screen = self._screen_key()

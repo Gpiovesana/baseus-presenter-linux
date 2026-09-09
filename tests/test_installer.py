@@ -83,10 +83,20 @@ esac
         release = self.root / "release"
         (release / "app").mkdir(parents=True)
         (release / "app/__init__.py").write_text("")
+        (release / "app/uninstall.py").write_text("""import os, pathlib, sys
+if len(sys.argv) == 3 and sys.argv[1] == '--register-desktop':
+    destination = pathlib.Path(os.environ['XDG_DATA_HOME']) / 'applications'
+    destination.mkdir(parents=True, exist_ok=True)
+    (destination / 'baseus-presenter-uninstall.desktop').write_text(
+        '[Desktop Entry]\\nType=Application\\nName=Uninstall\\n'
+        'Exec=/bin/bash \\\"' + str(pathlib.Path(sys.argv[2]) / 'uninstall.sh') + '\\\"\\n'
+        'Terminal=true\\n')
+""")
         (release / "baseus_app.py").write_text("")
         (release / "requirements.txt").write_text("")
         (release / "version").write_text("2.0.0\n")
         (release / "updater.sh").write_text("#!/bin/bash\n")
+        (release / "uninstall.sh").write_text("#!/bin/bash\n")
         archive = self.root / "release.tar.gz"
         with tarfile.open(archive, "w:gz") as output:
             output.add(release, arcname="baseus-presenter-linux-2.0.0")
@@ -123,6 +133,9 @@ esac
                 desktop = self.root / "data/applications/baseus-presenter.desktop"
                 self.assertIn(str(self.install / ".venv/bin/python"), desktop.read_text())
                 self.assertTrue((self.root / "config/autostart/baseus-presenter.desktop").exists())
+                uninstall = self.root / "data/applications/baseus-presenter-uninstall.desktop"
+                self.assertTrue(uninstall.exists())
+                self.assertIn(str(self.install / "uninstall.sh"), uninstall.read_text())
                 self.assertFalse(any(self.root.glob("installation.backup.*")))
                 self.assertFalse(any(self.root.glob("installation.prepare.*")))
 
@@ -146,6 +159,7 @@ exec "{real_mv}" "$@"
         self.assertNotEqual(result.returncode, 0)
         self.assert_old_install_preserved()
         self.assertFalse(any(self.root.glob("installation.backup.*")))
+        self.assertFalse((self.root / "data/applications/baseus-presenter-uninstall.desktop").exists())
 
     def test_launcher_failure_rolls_back_after_activation(self):
         import shutil
@@ -159,6 +173,7 @@ exec "{real_cp}" "$@"
         result = self.run_installer()
         self.assertNotEqual(result.returncode, 0)
         self.assert_old_install_preserved()
+        self.assertFalse((self.root / "data/applications/baseus-presenter-uninstall.desktop").exists())
 
     def test_network_failure_preserves_existing_installation(self):
         self.env["FAIL_DOWNLOAD"] = "1"

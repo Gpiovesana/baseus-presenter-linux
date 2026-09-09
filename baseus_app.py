@@ -2,6 +2,8 @@
 import sys
 import os
 import fcntl
+import signal
+from pathlib import Path
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import QTimer
@@ -13,6 +15,7 @@ from app.audio import AudioThread
 from app.overlay import PointerWindow
 from app.gui import MainWindow, TrayIcon
 from app.updater import UpdateChecker, start_update_process
+from app.uninstall import register_desktop
 
 log = get_logger("Main")
 
@@ -79,6 +82,8 @@ def main():
 
     # 2. Inicialização do Qt e Carregamento de Configurações
     app = QApplication(sys.argv)
+    # O desinstalador solicita encerramento normal antes de remover arquivos.
+    signal.signal(signal.SIGTERM, lambda *_: app.quit())
     app.setQuitOnLastWindowClosed(False) # Mantém rodando mesmo se fechar a janela de config
 
     config = Config()
@@ -194,6 +199,13 @@ def main():
     app.aboutToQuit.connect(cleanup)
 
     log.info("Todos os sistemas online. Aguardando comandos do passador.")
+    # Compatibilidade com o updater antigo, que não copiava uninstall.sh.
+    try:
+        register_desktop(Path(__file__).resolve().parent)
+    except ValueError:
+        pass  # Checkout de desenvolvimento: não cria atalhos nem wrappers.
+    except OSError as error:
+        log.warning(f"Não foi possível registrar o desinstalador: {error}")
     # O supervisor só confirma a atualização quando o primeiro ciclo de
     # eventos roda, após a construção da interface e início dos workers.
     ready_path = os.environ.pop("BASEUS_UPDATE_READY_FILE", None)

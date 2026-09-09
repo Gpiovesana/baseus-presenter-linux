@@ -5,10 +5,12 @@ import copy
 import contextlib
 import socket
 import threading
+import shutil
+from pathlib import Path
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QSlider, QComboBox, QPushButton, QSystemTrayIcon, QMenu,
                              qApp, QTabWidget, QColorDialog, QFileDialog, QFormLayout, QInputDialog, QMessageBox, QCheckBox, QProgressDialog, QStyle)
-from PyQt5.QtCore import Qt, pyqtSignal, QThread, QTimer
+from PyQt5.QtCore import Qt, pyqtSignal, QThread, QTimer, QProcess
 from PyQt5.QtGui import QColor, QIcon, QPixmap, QPainter, QPen
 import sounddevice as sd
 
@@ -21,6 +23,7 @@ except ImportError:
 
 from .logger import get_logger
 from .config import Config
+from .uninstall import validate_installation, register_desktop
 
 log = get_logger(__name__)
 
@@ -278,9 +281,18 @@ class MainWindow(QMainWindow):
         self.btn_check_update = QPushButton("Verificar Atualizações")
         self.btn_check_update.clicked.connect(self.manual_update_requested.emit)
 
+        self.btn_uninstall = QPushButton("Desinstalar Baseus Presenter…")
+        self.btn_uninstall.clicked.connect(self.request_uninstall)
+        try:
+            validate_installation(Path(__file__).resolve().parents[1])
+        except (OSError, ValueError):
+            self.btn_uninstall.setEnabled(False)
+            self.btn_uninstall.setToolTip("Disponível apenas na versão instalada, fora de um checkout Git.")
+
         form_geral.addRow("Ao clicar no X da janela:", self.combo_close)
         form_geral.addRow("Visual:", self.check_legenda)
         form_geral.addRow("Software:", self.btn_check_update)
+        form_geral.addRow("", self.btn_uninstall)
         tabs.addTab(tab_geral, "Geral")
 
         # Injeção inicial dos dados na tela
@@ -785,6 +797,22 @@ class MainWindow(QMainWindow):
                 pass
         self.installer = None
         self._lang_loader = None
+
+    def request_uninstall(self):
+        """Abre o aviso no terminal; o aplicativo só fecha após a confirmação."""
+        target = Path(__file__).resolve().parents[1]
+        try:
+            register_desktop(target)
+            terminal = shutil.which("x-terminal-emulator") or shutil.which("xterm")
+            if not terminal:
+                raise RuntimeError("Nenhum terminal encontrado. Use o atalho Desinstalar Baseus Presenter no menu de aplicativos.")
+            result = QProcess.startDetached(
+                terminal, ["-e", "/bin/bash", str(target / "uninstall.sh")], str(target.parent))
+            started = result[0] if isinstance(result, tuple) else result
+            if not started:
+                raise RuntimeError("Não foi possível abrir o terminal de desinstalação.")
+        except (OSError, ValueError, RuntimeError) as error:
+            QMessageBox.warning(self, "Desinstalação", str(error))
 
     def closeEvent(self, event):
         self.flush_pending_save()

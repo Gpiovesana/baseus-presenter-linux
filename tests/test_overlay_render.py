@@ -319,6 +319,135 @@ class TestConversaoGlobalParaLocalEstavel(OverlayTestCase):
 
         self.assertEqual(local, QPoint(50, 50))
 
+
+class TestTransicaoDeMonitor(OverlayTestCase):
+    """Regressões da sincronização do overlay entre monitores."""
+
+    @staticmethod
+    def _screen(name, x=0, y=0, width=1920, height=1080):
+        from PyQt5.QtCore import QRect
+
+        screen = mock.Mock()
+        screen.name.return_value = name
+        screen.geometry.return_value = QRect(x, y, width, height)
+        return screen
+
+    @staticmethod
+    def _cursor_at(point):
+        cursor = mock.Mock()
+        cursor.pos.return_value = point
+        return cursor
+
+    def test_atualiza_tela_e_geometria_quando_cursor_muda_de_monitor(self):
+        win = self.make_overlay()
+        tela_a = self._screen("TELA-A", 0)
+        tela_b = self._screen("TELA-B", 1920)
+        win.current_screen = tela_a
+
+        with mock.patch.object(ov.QApplication, "screenAt", return_value=tela_b), \
+             mock.patch.object(win, "cursor", return_value=self._cursor_at(QPoint(2000, 40))), \
+             mock.patch.object(win, "setGeometry") as set_geometry:
+            win._update_overlay()
+
+        self.assertIs(win.current_screen, tela_b)
+        set_geometry.assert_called_once_with(tela_b.geometry())
+
+    def test_sem_screen_at_preserva_monitor_atual(self):
+        win = self.make_overlay()
+        tela_a = self._screen("TELA-A")
+        win.current_screen = tela_a
+
+        with mock.patch.object(ov.QApplication, "screenAt", return_value=None), \
+             mock.patch.object(win, "cursor", return_value=self._cursor_at(QPoint(10, 10))), \
+             mock.patch.object(win, "setGeometry") as set_geometry:
+            win._update_overlay()
+
+        self.assertIs(win.current_screen, tela_a)
+        set_geometry.assert_not_called()
+
+    def test_pincel_ativo_muda_de_tela_sem_perder_pontos(self):
+        """Cruzar monitor com o botão pressionado divide o traço na origem."""
+        win = self.make_overlay()
+        tela_a = self._screen("TELA-A", 0)
+        tela_b = self._screen("TELA-B", 1920)
+        win.current_screen = tela_a
+        with mock.patch.object(ov.QApplication, "screenAt", return_value=tela_a):
+            win.set_pen_active(True)
+        win.current_stroke = [QPoint(100, 100), QPoint(200, 100)]
+
+        with mock.patch.object(ov.QApplication, "screenAt", return_value=tela_b), \
+             mock.patch.object(win, "cursor", return_value=self._cursor_at(QPoint(2000, 100))), \
+             mock.patch.object(win, "setGeometry"):
+            win._update_overlay()
+
+        self.assertIs(win.current_screen, tela_b)
+        self.assertTrue(win.is_pen_drawing)
+        self.assertFalse(win.current_stroke)
+        self.assertEqual(win.current_stroke_screen, "TELA-B")
+        self.assertEqual(len(win.pen_strokes), 1)
+        self.assertEqual(win.pen_strokes[0]["screen"], "TELA-A")
+        self.assertEqual(win.pen_strokes[0]["points"], [QPoint(100, 100), QPoint(200, 100)])
+
+    def test_ativacao_sincroniza_antes_do_timer(self):
+        from PyQt5.QtGui import QPixmap
+
+        win = self.make_overlay()
+        tela = self._screen("ESQUERDA", -1920, -200)
+        tela.grabWindow.return_value = QPixmap(1920, 1080)
+        win.mode_index = win.modes.index("LUPA")
+        with mock.patch.object(ov.QApplication, "screenAt", return_value=tela):
+            win.set_active(True)
+            win.set_pen_active(True)
+        self.assertEqual(win.geometry(), tela.geometry())
+        self.assertEqual(win.current_stroke_screen, "ESQUERDA")
+        self.assertEqual(win._global_to_local(QPoint(-1900, -180)), QPoint(20, 20))
+        tela.grabWindow.assert_called_once_with(0)
+
+    def test_lupa_recaptura_ao_mudar_monitor(self):
+        from PyQt5.QtGui import QPixmap
+
+        win = self.make_overlay()
+        win.mode_index = win.modes.index("LUPA")
+        win.is_drawing = True
+        win.screen_pixmap = QPixmap(100, 100)
+        tela = self._screen("SECUNDARIA", 1600, 0)
+        tela.grabWindow.return_value = QPixmap(1920, 1080)
+        with mock.patch.object(ov.QApplication, "screenAt", return_value=tela):
+            win._update_overlay()
+        tela.grabWindow.assert_called_once_with(0)
+        self.assertIs(win.screen_pixmap, tela.grabWindow.return_value)
+
+    def test_reorganizacao_do_mesmo_monitor_invalida_cache(self):
+        win = self.make_overlay()
+        tela = self._screen("TELA", -1920, 300)
+        win.current_screen = tela
+        win._strokes_cache_dirty = False
+        with mock.patch.object(ov.QApplication, "screenAt", return_value=tela):
+            win._update_overlay()
+        self.assertEqual(win.geometry(), tela.geometry())
+        self.assertTrue(win._strokes_cache_dirty)
+
+    def test_flags_x11_sao_condicionais_ao_backend(self):
+        """A flag bypass só deve ser usada no backend X11/XCB."""
+        with mock.patch.object(ov.QApplication, "platformName", return_value="xcb"):
+            x11_win = self.make_overlay()
+        self.assertTrue(x11_win.windowFlags() & ov.Qt.X11BypassWindowManagerHint)
+
+        with mock.patch.object(ov.QApplication, "platformName", return_value="offscreen"):
+            other_win = self.make_overlay()
+        self.assertFalse(other_win.windowFlags() & ov.Qt.X11BypassWindowManagerHint)
+
+    def test_toggle_tela_preta_preserva_bypass_x11(self):
+        with mock.patch.object(ov.QApplication, "platformName", return_value="xcb"):
+            win = self.make_overlay()
+        self.assertTrue(win.windowFlags() & ov.Qt.X11BypassWindowManagerHint)
+
+        win.toggle_black_screen()
+        self.assertTrue(win.windowFlags() & ov.Qt.X11BypassWindowManagerHint)
+        win.toggle_black_screen()
+        self.assertTrue(win.windowFlags() & ov.Qt.X11BypassWindowManagerHint)
+
+class TestCacheEntreMonitores(OverlayTestCase):
     def test_rebuild_usa_geometria_do_monitor_atual_nao_a_do_widget(self):
         from PyQt5.QtCore import QPoint
         from PyQt5.QtGui import QPen, QColor

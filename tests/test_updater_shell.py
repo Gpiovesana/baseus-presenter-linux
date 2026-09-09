@@ -26,7 +26,8 @@ class TestUpdaterShell(unittest.TestCase):
                         BASEUS_UPDATE_STATE_FILE=str(self.state),
                         BASEUS_UPDATE_LOCK_FILE=str(self.lock),
                         PATH=f"{self.bin}:{os.environ['PATH']}",
-                        TEST_UPDATE_ROOT=str(self.root))
+                        TEST_UPDATE_ROOT=str(self.root),
+                        XDG_DATA_HOME=str(self.root / "data"))
         runner = f'''#!{sys.executable}
 import os, pathlib, sys
 if sys.argv[1:3] == ['-m', 'venv']:
@@ -63,9 +64,19 @@ exit 1
         self.release = self.root / "release"
         (self.release / "app").mkdir(parents=True)
         (self.release / "app/__init__.py").write_text("")
+        (self.release / "app/uninstall.py").write_text("""import os, pathlib, sys
+if len(sys.argv) == 3 and sys.argv[1] == '--register-desktop':
+    destination = pathlib.Path(os.environ['XDG_DATA_HOME']) / 'applications'
+    destination.mkdir(parents=True, exist_ok=True)
+    (destination / 'baseus-presenter-uninstall.desktop').write_text(
+        '[Desktop Entry]\\nType=Application\\nName=Uninstall\\n'
+        'Exec=/bin/bash \\\"' + str(pathlib.Path(sys.argv[2]) / 'uninstall.sh') + '\\\"\\n'
+        'Terminal=true\\n')
+""")
         (self.release / "version").write_text("2.0.0\n")
         (self.release / "requirements.txt").write_text("")
         (self.release / "updater.sh").write_text("#!/bin/bash\n")
+        (self.release / "uninstall.sh").write_text("#!/bin/bash\n")
         self.payload = '''import os, pathlib, time
 root = pathlib.Path(os.environ['TEST_UPDATE_ROOT'])
 if os.environ.get('FAIL_STARTUP'):
@@ -122,6 +133,9 @@ time.sleep(1)
         self.assertEqual(launched.stdout.strip(), "ok")
         self.assertFalse(Path(str(self.install) + "_backup").exists())
         self.assertFalse(self.state.exists())
+        uninstall = self.root / "data/applications/baseus-presenter-uninstall.desktop"
+        self.assertTrue(uninstall.exists())
+        self.assertIn(str(self.install / "uninstall.sh"), uninstall.read_text())
 
     def test_startup_failure_restores_and_restarts_previous_version(self):
         self.env["FAIL_STARTUP"] = "1"
@@ -136,6 +150,7 @@ time.sleep(1)
         self.assertTrue((self.root / "rollback").exists(), result.stdout + result.stderr)
         self.assertEqual((self.root / "rollback").read_text(), str(self.install))
         self.assertFalse(self.state.exists())
+        self.assertFalse((self.root / "data/applications/baseus-presenter-uninstall.desktop").exists())
 
     def test_lock_rejects_concurrent_update(self):
         import fcntl

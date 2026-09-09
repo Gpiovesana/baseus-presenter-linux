@@ -60,6 +60,23 @@ bash install.sh
 ```
 
 
+## Desinstalação
+
+Abra **Configurações → Geral → Desinstalar Baseus Presenter…**, ou procure
+**Desinstalar Baseus Presenter** no menu de aplicativos. O terminal primeiro
+mostra um aviso: é necessário digitar `DESINSTALAR` para continuar. Enter ou
+fechar o terminal cancela. A senha administrativa é solicitada somente para
+remover a regra USB.
+
+O aplicativo é encerrado antes da remoção. A pasta de instalação inteira,
+o ambiente virtual, os atalhos e a inicialização automática são removidos.
+Configurações, modelos e transcrições fora da pasta de instalação são preservados;
+arquivos pessoais dentro dela também serão apagados. A remoção não usa a lixeira.
+O recurso fica desativado em checkouts Git de desenvolvimento.
+
+Se necessário, execute `bash ~/BaseusPresenter/uninstall.sh` (ajuste o caminho
+se instalou em outra pasta). O mesmo aviso de confirmação será exibido.
+
 ## ⚙️ Como usar
 * Inicie o programa: Você pode iniciá-lo pelo terminal rodando `~/BaseusPresenter/.venv/bin/python3 ~/BaseusPresenter/baseus_app.py`.
 

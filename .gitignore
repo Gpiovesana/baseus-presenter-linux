@@ -1,0 +1,25 @@
+.venv/
+**/__pycache__/
+*.pyc
+
+# Configuração/log locais do usuário (nunca devem ir pro repositório, mesmo
+# que apareçam por engano dentro da pasta do projeto).
+*.log
+*.log.*
+baseus_pointer.json
+baseus_pointer.json.*
+*.corrupt
+*.tmp
+
+# Áudios/artefatos de teste manual de hardware (ex.: tools/diagnose_audio.py)
+*.wav
+
+# Pastas de rascunho/comparação temporária que às vezes uso durante sessões
+# de auditoria (nunca fazem parte do código do projeto).
+_corrigidos/
+
+# Editores / SO
+.vscode/
+*.swp
+.DS_Store
+:memory:.ses

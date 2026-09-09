@@ -37,7 +37,7 @@ Um software open-source não-oficial que desbloqueia e expande todas as funciona
 
 **Opção 1: Instalação Rápida (1 linha):**
 
-Abra o terminal e cole o comando abaixo. Ele fará o download das dependências, criará um ambiente virtual isolado (`venv`) e instalará o aplicativo na sua pasta Home.
+Abra o terminal e cole o comando abaixo. O instalador consulta a API do GitHub e instala a última release estável publicada (rascunhos e pré-releases são ignorados). Ele prepara o código e o ambiente virtual antes de substituir uma instalação existente, que é restaurada se a ativação falhar. O merge na `main` publica este instalador, mas não cria uma release: para distribuir uma nova versão do aplicativo, publique uma tag/release que contenha esse código.
 
 ```bash
 wget -qO- https://raw.githubusercontent.com/Gpiovesana/baseus-presenter-linux/main/install.sh | bash
@@ -140,7 +140,7 @@ An unofficial open-source software that unlocks and expands all features of the 
 ## 📥 Installation
 
 **Option 1: Quick Install (1 line)**
-Open the terminal and paste the command below. It will download dependencies, create an isolated virtual environment (`venv`), and install the application in your Home folder.
+Open the terminal and paste the command below. The installer queries the GitHub API and installs the latest published stable release (drafts and pre-releases are ignored). It prepares the code and virtual environment before replacing an existing installation, which is restored if activation fails. Merging into `main` publishes this installer, but does not create a release: to distribute a new application version, publish a tag/release containing that code.
 
 ```bash
 wget -qO- https://raw.githubusercontent.com/Gpiovesana/baseus-presenter-linux/main/install.sh | bash

@@ -47,6 +47,9 @@ Abra o terminal e cole o comando abaixo. O instalador consulta a API do GitHub e
 wget -qO- https://raw.githubusercontent.com/Gpiovesana/baseus-presenter-linux/main/install.sh | bash
 ```
 
+Durante a instalação, escolha se o Baseus Presenter deve iniciar automaticamente
+ao entrar no sistema: digite `y` para ativar ou `n` para desativar. Em instalações automatizadas, use `--autostart` ou `--no-autostart` para informar a escolha sem uma pergunta.
+
 **Opção 2: Instalação Manual/Auditável (Para usuários avançados):**
 
 Baixe o script de instalação
@@ -59,6 +62,15 @@ cat install.sh
 bash install.sh
 ```
 
+
+## Atualização
+
+Na janela de atualização, a opção **Iniciar o Baseus Presenter automaticamente ao
+entrar no sistema** reflete a configuração atual. Marque ou desmarque antes de
+clicar em **Atualizar**. A escolha só é aplicada após a nova versão abrir com
+sucesso; cancelar ou ocorrer uma falha preserva a configuração anterior.
+Versões antigas que ainda não possuem essa opção mantêm o comportamento anterior
+durante a atualização; a escolha estará disponível nas próximas atualizações.
 
 ## Desinstalação
 
@@ -168,6 +180,9 @@ Open the terminal and paste the command below. The installer queries the GitHub 
 wget -qO- https://raw.githubusercontent.com/Gpiovesana/baseus-presenter-linux/main/install.sh | bash
 ```
 
+During installation, choose whether Baseus Presenter should start automatically
+when you sign in: enter `y` to enable it or `n` to disable it. For automated installations, use `--autostart` or `--no-autostart` to provide the choice without a prompt.
+
 **Option 2: Manual/Auditable Install (For advanced users)**
 
 ```bash
@@ -180,6 +195,16 @@ cat install.sh
 # Run the installer
 bash install.sh
 ```
+
+## Updates
+
+The update dialog includes **Iniciar o Baseus Presenter automaticamente ao entrar
+no sistema** (Start Baseus Presenter automatically when you sign in), initially
+set to the current configuration. Check or uncheck it before clicking **Atualizar**
+(Update). The choice is applied only after the new version starts successfully;
+cancelling or a failed update preserves the previous setting.
+Older versions without this option retain their previous update behavior; the
+choice becomes available for subsequent updates.
 
 ## Uninstallation
 

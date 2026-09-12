@@ -12,7 +12,48 @@ LOCK_FILE="${BASEUS_UPDATE_LOCK_FILE:-${INSTALL_DIR}.update-lock}"
 RELEASE_TAG="${1:-}"
 PID="${2:-}"
 PREPARED_FILE="${3:-}"
+AUTOSTART_CHOICE="${4:-keep}"
 VERSION="${RELEASE_TAG#v}"
+
+case "$AUTOSTART_CHOICE" in
+    keep|enable|disable) ;;
+    *) echo "❌ Escolha de inicialização automática inválida."; exit 2 ;;
+esac
+
+# Só é chamado após a confirmação de abertura da nova versão.
+# A substituição atômica mantém o atalho anterior caso a gravação falhe.
+configure_autostart() {
+    [[ "$AUTOSTART_CHOICE" == keep ]] && return 0
+    python3 - "$INSTALL_DIR" "$AUTOSTART_CHOICE" <<'PY_AUTOSTART'
+import os
+import pathlib
+import sys
+import tempfile
+
+installation = pathlib.Path(sys.argv[1])
+entry = pathlib.Path(os.environ.get("XDG_CONFIG_HOME") or pathlib.Path.home() / ".config") / "autostart/baseus-presenter.desktop"
+if sys.argv[2] == "disable":
+    entry.unlink(missing_ok=True)
+else:
+    def quote(value):
+        value = str(value).replace("%", "%%")
+        for char in ("\\", '"', "`", "$"):
+            value = value.replace(char, "\\" + char)
+        return '"' + value.replace("\\", "\\\\") + '"'
+
+    entry.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".baseus-autostart-", dir=entry.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            output.write(
+                "[Desktop Entry]\nType=Application\nName=Baseus Presenter\n"
+                f"Exec={quote(installation / '.venv/bin/python')} {quote(installation / 'baseus_app.py')}\n"
+                "Icon=input-tablet\nTerminal=false\nCategories=Utility;\nStartupNotify=false\n")
+        os.replace(temporary, entry)
+    finally:
+        pathlib.Path(temporary).unlink(missing_ok=True)
+PY_AUTOSTART
+}
 
 if [[ ! "$VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]] ||
    [[ ! "$PID" =~ ^[0-9]+$ ]] || [[ -z "$PREPARED_FILE" ]]; then
@@ -166,7 +207,7 @@ while [[ "$(cat "$STARTUP_READY_FILE" 2>/dev/null || true)" != "$new_pid" ]] && 
 done
 
 if [[ "$(cat "$STARTUP_READY_FILE" 2>/dev/null || true)" == "$new_pid" ]] &&
-   kill -0 "$new_pid" 2>/dev/null; then
+   kill -0 "$new_pid" 2>/dev/null && configure_autostart; then
     if ! python3 "$INSTALL_DIR/app/uninstall.py" --register-desktop "$INSTALL_DIR"; then
         echo "⚠️ Não foi possível registrar o atalho de desinstalação; o aplicativo tentará novamente ao abrir."
     fi
@@ -176,7 +217,7 @@ if [[ "$(cat "$STARTUP_READY_FILE" 2>/dev/null || true)" == "$new_pid" ]] &&
     exit 0
 fi
 
-echo "⚠️ A nova versão não confirmou a inicialização; restaurando a anterior."
+echo "⚠️ Falha ao iniciar ou configurar a nova versão; restaurando a anterior."
 if kill -0 "$new_pid" 2>/dev/null; then
     kill "$new_pid" 2>/dev/null || true
     remaining=10

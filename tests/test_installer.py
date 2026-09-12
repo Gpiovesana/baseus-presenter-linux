@@ -1,6 +1,7 @@
 """Testa o instalador sem sudo, rede ou alterações fora de diretórios temporários."""
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tarfile
@@ -113,6 +114,14 @@ if len(sys.argv) == 3 and sys.argv[1] == '--register-desktop':
             env=self.env, text=True, capture_output=True, timeout=15,
         )
 
+    def run_piped_installer(self, answers):
+        command = f"cat {shlex.quote(str(ROOT / 'install.sh'))} | bash"
+        return subprocess.run(
+            ["script", "-qefc", command, "/dev/null"],
+            input=answers, env=self.env, text=True, capture_output=True,
+            timeout=15,
+        )
+
     def assert_old_install_preserved(self):
         self.assertEqual((self.install / "version").read_text(), "1.0.0\n")
         self.assertEqual((self.install / ".venv/old-environment").read_text(), "preserved")
@@ -121,7 +130,7 @@ if len(sys.argv) == 3 and sys.argv[1] == '--register-desktop':
         for tag in ("v2.0.0", "2.0.0"):
             with self.subTest(tag=tag):
                 self.api.write_text(json.dumps({"tag_name": tag, "draft": False, "prerelease": False}))
-                result = self.run_installer()
+                result = self.run_installer("--autostart")
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertEqual((self.install / "version").read_text(), "2.0.0\n")
                 self.assertIn("/releases/latest", self.calls.read_text())
@@ -147,6 +156,34 @@ if len(sys.argv) == 3 and sys.argv[1] == '--register-desktop':
         self.assertEqual((destination / "version").read_text(), "2.0.0\n")
         self.assertFalse((self.root / "config/autostart/baseus-presenter.desktop").exists())
 
+    def test_piped_install_accepts_uppercase_no(self):
+        result = self.run_piped_installer("N\n")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((self.root / "config/autostart/baseus-presenter.desktop").exists())
+
+    def test_piped_install_accepts_lowercase_no(self):
+        result = self.run_piped_installer("n\n")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((self.root / "config/autostart/baseus-presenter.desktop").exists())
+
+    def test_piped_install_accepts_lowercase_yes(self):
+        result = self.run_piped_installer("y\n")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue((self.root / "config/autostart/baseus-presenter.desktop").exists())
+
+    def test_piped_install_reprompts_until_yes_or_no(self):
+        result = self.run_piped_installer("\nindefinido\nY\n")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue((self.root / "config/autostart/baseus-presenter.desktop").exists())
+        self.assertGreaterEqual(result.stdout.count("[y/n]"), 3)
+
+    def test_install_without_terminal_requires_explicit_autostart_choice(self):
+        result = self.run_installer()
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assert_old_install_preserved()
+        self.assertIn("--autostart", result.stdout + result.stderr)
+        self.assertIn("--no-autostart", result.stdout + result.stderr)
+
     def test_activation_failure_restores_old_code_and_environment(self):
         import shutil
         real_mv = shutil.which("mv")
@@ -155,7 +192,7 @@ if [ "$1" = -- ]; then shift; fi
 case "$1" in *.prepare.*/staging) exit 19 ;; esac
 exec "{real_mv}" "$@"
 ''')
-        result = self.run_installer()
+        result = self.run_installer("--no-autostart")
         self.assertNotEqual(result.returncode, 0)
         self.assert_old_install_preserved()
         self.assertFalse(any(self.root.glob("installation.backup.*")))
@@ -170,20 +207,20 @@ for argument in "$@"; do
 done
 exec "{real_cp}" "$@"
 ''')
-        result = self.run_installer()
+        result = self.run_installer("--no-autostart")
         self.assertNotEqual(result.returncode, 0)
         self.assert_old_install_preserved()
         self.assertFalse((self.root / "data/applications/baseus-presenter-uninstall.desktop").exists())
 
     def test_network_failure_preserves_existing_installation(self):
         self.env["FAIL_DOWNLOAD"] = "1"
-        result = self.run_installer()
+        result = self.run_installer("--no-autostart")
         self.assertNotEqual(result.returncode, 0)
         self.assert_old_install_preserved()
 
     def test_pip_failure_preserves_existing_installation_and_exact_tag_url(self):
         self.env["FAIL_PIP"] = "1"
-        result = self.run_installer()
+        result = self.run_installer("--no-autostart")
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assert_old_install_preserved()
         self.assertIn("/archive/refs/tags/v2.0.0.tar.gz", self.calls.read_text())
@@ -206,7 +243,7 @@ exec "{real_cp}" "$@"
         blocked = self.root / "blocked-data"
         blocked.write_text("not a directory")
         self.env["XDG_DATA_HOME"] = str(blocked)
-        result = self.run_installer()
+        result = self.run_installer("--no-autostart")
         self.assertNotEqual(result.returncode, 0)
         self.assert_old_install_preserved()
         self.assertIn("restaurada", result.stdout)
@@ -223,7 +260,7 @@ exec "{real_cp}" "$@"
         for metadata in cases:
             with self.subTest(metadata=metadata):
                 self.api.write_text(json.dumps(metadata))
-                result = self.run_installer()
+                result = self.run_installer("--no-autostart")
                 self.assertNotEqual(result.returncode, 0)
                 self.assert_old_install_preserved()
 
@@ -231,7 +268,7 @@ exec "{real_cp}" "$@"
         self.api.write_text(json.dumps({
             "tag_name": "2.1.0", "draft": False, "prerelease": False,
         }))
-        result = self.run_installer()
+        result = self.run_installer("--no-autostart")
         self.assertNotEqual(result.returncode, 0)
         self.assert_old_install_preserved()
         self.assertIn("não confere", result.stdout)
@@ -244,7 +281,7 @@ exec "{real_cp}" "$@"
             else:
                 git.mkdir()
                 (git / "HEAD").write_text("ref: refs/heads/main\n")
-            result = self.run_installer()
+            result = self.run_installer("--no-autostart")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("checkout Git", result.stdout)
             if worktree:
@@ -258,7 +295,7 @@ exec "{real_cp}" "$@"
         lock = Path(self.env["BASEUS_UPDATE_LOCK_FILE"])
         with lock.open("w") as locked:
             fcntl.flock(locked, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            result = self.run_installer()
+            result = self.run_installer("--no-autostart")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("andamento", result.stdout)
         self.assert_old_install_preserved()
@@ -268,7 +305,7 @@ exec "{real_cp}" "$@"
         lock = self.root / "runtime/baseus_presenter.lock"
         with lock.open("w") as locked:
             fcntl.lockf(locked, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            result = self.run_installer()
+            result = self.run_installer("--no-autostart")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("trava do aplicativo", result.stdout + result.stderr)
         self.assert_old_install_preserved()
@@ -289,7 +326,7 @@ with open(os.path.join(os.environ['XDG_RUNTIME_DIR'], 'baseus_presenter.lock'), 
         raise SystemExit('A instalação está sendo movida sem a trava do app!')
 raise SystemExit(subprocess.call([{real_mv!r}] + sys.argv[1:]))
 ''')
-        result = self.run_installer()
+        result = self.run_installer("--no-autostart")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         with (self.root / "runtime/baseus_presenter.lock").open("a+") as lock:
             fcntl.lockf(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)

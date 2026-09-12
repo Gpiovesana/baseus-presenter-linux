@@ -7,9 +7,10 @@ INSTALL_DIR="$(realpath -m -- "$REQUESTED_INSTALL_DIR")"
 CANONICAL_HOME="$(realpath -m -- "$HOME")"
 DESKTOP_FILE="baseus-presenter.desktop"
 LOCK_FILE="${BASEUS_UPDATE_LOCK_FILE:-${INSTALL_DIR}.update-lock}"
-ENABLE_AUTOSTART=true
+ENABLE_AUTOSTART=""
 for arg in "$@"; do
     case "$arg" in
+        --autostart) ENABLE_AUTOSTART=true ;;
         --no-autostart) ENABLE_AUTOSTART=false ;;
         *) echo "❌ ERRO: opção desconhecida: $arg"; exit 2 ;;
     esac
@@ -46,6 +47,28 @@ fi
 if ! command -v apt >/dev/null 2>&1; then
     echo "❌ ERRO: Este instalador requer uma distribuição baseada em Debian/Ubuntu (Zorin, Mint, etc)."
     exit 1
+fi
+
+if [[ -z "$ENABLE_AUTOSTART" ]]; then
+    if ! exec 3<>/dev/tty 2>/dev/null; then
+        echo "❌ ERRO: não há um terminal disponível para escolher a inicialização automática."
+        echo "   Execute novamente com --autostart ou --no-autostart."
+        exit 2
+    fi
+    while true; do
+        printf "Deseja iniciar o Baseus Presenter automaticamente ao entrar no sistema? [y/n]: " >&3
+        if ! IFS= read -r AUTOSTART_ANSWER <&3; then
+            exec 3>&-
+            echo "❌ ERRO: não foi possível ler a escolha de inicialização automática."
+            exit 2
+        fi
+        case "${AUTOSTART_ANSWER,,}" in
+            y) ENABLE_AUTOSTART=true; break ;;
+            n) ENABLE_AUTOSTART=false; break ;;
+            *) printf "Resposta inválida. Digite y ou n.\n" >&3 ;;
+        esac
+    done
+    exec 3>&-
 fi
 
 mkdir -p -- "$(dirname -- "$INSTALL_DIR")"

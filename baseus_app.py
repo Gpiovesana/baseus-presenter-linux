@@ -154,8 +154,9 @@ def main():
             log.debug(f"Aviso silencioso ({version}) suprimido: usuário já recusou nesta sessão.")
             return
 
-        if settings_gui.prompt_update(version):
-            start_update_process(version)
+        confirmed, autostart = settings_gui.prompt_update(version)
+        if confirmed:
+            start_update_process(version, autostart=autostart)
         else:
             updater.ignored_version = version
             log.info(f"Atualização para {version} adiada pelo usuário.")

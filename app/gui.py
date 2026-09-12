@@ -1,5 +1,6 @@
 # ~/Documentos/Projetos/baseus-presenter-linux/app/gui.py
 import os
+import configparser
 import re
 import copy
 import contextlib
@@ -332,13 +333,28 @@ class MainWindow(QMainWindow):
         self.btn_check_update.setText("Buscando no GitHub..." if is_checking else "Verificar Atualizações")
 
     def prompt_update(self, version):
-        reply = QMessageBox.question(
-            self,
-            "Atualização Disponível",
-            f"A versão {version} do Baseus Presenter foi lançada.\n\nDeseja fechar o aplicativo e atualizar agora?",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        return reply == QMessageBox.Yes
+        entry = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "autostart/baseus-presenter.desktop"
+        enabled = entry.is_file()
+        if enabled:
+            settings = configparser.ConfigParser(interpolation=None)
+            try:
+                settings.read(entry, encoding="utf-8")
+                enabled = (not settings.getboolean("Desktop Entry", "Hidden", fallback=False)
+                           and settings.getboolean("Desktop Entry", "X-GNOME-Autostart-enabled", fallback=True))
+            except (OSError, ValueError, configparser.Error):
+                enabled = False
+        box = QMessageBox(self)
+        box.setWindowTitle("Atualização Disponível")
+        box.setText(f"A versão {version} do Baseus Presenter foi lançada.\n\nDeseja fechar o aplicativo e atualizar agora?")
+        box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        box.button(QMessageBox.Yes).setText("Atualizar")
+        box.button(QMessageBox.No).setText("Cancelar")
+        box.setDefaultButton(QMessageBox.No)
+        checkbox = QCheckBox("Iniciar o Baseus Presenter automaticamente ao entrar no sistema", box)
+        checkbox.setChecked(enabled)
+        box.setCheckBox(checkbox)
+        reply = box.exec_()
+        return reply == QMessageBox.Yes, checkbox.isChecked()
 
     def show_up_to_date(self):
         QMessageBox.information(self, "Atualização", "Você já está rodando a versão mais recente.")

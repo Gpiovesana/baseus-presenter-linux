@@ -27,7 +27,8 @@ class TestUpdaterShell(unittest.TestCase):
                         BASEUS_UPDATE_LOCK_FILE=str(self.lock),
                         PATH=f"{self.bin}:{os.environ['PATH']}",
                         TEST_UPDATE_ROOT=str(self.root),
-                        XDG_DATA_HOME=str(self.root / "data"))
+                        XDG_DATA_HOME=str(self.root / "data"),
+                        XDG_CONFIG_HOME=str(self.root / "config"))
         runner = f'''#!{sys.executable}
 import os, pathlib, sys
 if sys.argv[1:3] == ['-m', 'venv']:
@@ -92,15 +93,66 @@ time.sleep(1)
         path.write_text(text)
         path.chmod(0o755)
 
-    def run_update(self, pid="99999999"):
+    def run_update(self, pid="99999999", choice="keep"):
         (self.release / "baseus_app.py").write_text(self.payload)
         archive = self.root / "release.tar.gz"
         with tarfile.open(archive, "w:gz") as output:
             output.add(self.release, arcname="release")
         self.env["FAKE_RELEASE"] = str(archive)
         return subprocess.run(
-            ["bash", str(ROOT / "updater.sh"), "2.0.0", pid, str(self.status)],
+            ["bash", str(ROOT / "updater.sh"), "2.0.0", pid, str(self.status), choice],
             env=self.env, cwd=self.install, text=True, capture_output=True, timeout=15)
+
+    def test_update_changes_autostart_only_on_success(self):
+        entry = self.root / "config/autostart/baseus-presenter.desktop"
+        for previous, choice, expected in ((False, "enable", True), (True, "disable", False),
+                                           (True, "enable", True), (False, "disable", False)):
+            with self.subTest(previous=previous, choice=choice):
+                entry.parent.mkdir(parents=True, exist_ok=True)
+                entry.unlink(missing_ok=True)
+                if previous:
+                    entry.write_text("old entry")
+                result = self.run_update(choice=choice)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(entry.exists(), expected)
+                if expected:
+                    self.assertIn(str(self.install / "baseus_app.py"), entry.read_text())
+
+    def test_failed_startup_preserves_autostart_bytes(self):
+        entry = self.root / "config/autostart/baseus-presenter.desktop"
+        entry.parent.mkdir(parents=True)
+        entry.write_text("previous settings")
+        self.env["FAIL_STARTUP"] = "1"
+        result = self.run_update(choice="disable")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(entry.read_text(), "previous settings")
+
+    def test_invalid_autostart_choice_stops_before_download(self):
+        result = self.run_update(choice="invalid")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / "curl-args").exists())
+
+    def test_autostart_write_failure_rolls_back_version(self):
+        blocked = self.root / "config"
+        blocked.write_text("preserve this file")
+        result = self.run_update(choice="enable")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.install / "version").read_text(), "1.0.0\n")
+        self.assertEqual(blocked.read_text(), "preserve this file")
+
+    def test_legacy_update_keeps_existing_autostart_unchanged(self):
+        entry = self.root / "config/autostart/baseus-presenter.desktop"
+        entry.parent.mkdir(parents=True)
+        entry.write_text("[Desktop Entry]\nHidden=true\n")
+        result = self.run_update()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(entry.read_text(), "[Desktop Entry]\nHidden=true\n")
+
+    def test_failed_download_does_not_enable_autostart(self):
+        self.env["FAIL_DOWNLOAD"] = "1"
+        result = self.run_update(choice="enable")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / "config/autostart/baseus-presenter.desktop").exists())
 
     def test_download_failure_preserves_installation(self):
         self.env["FAIL_DOWNLOAD"] = "1"

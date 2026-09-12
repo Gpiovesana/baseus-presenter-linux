@@ -165,7 +165,7 @@ class UpdateChecker(QObject):
         thread.deleteLater()
 
 
-def start_update_process(version_tag):
+def start_update_process(version_tag, autostart=None):
     """Prepara a atualização e só encerra o app quando o staging estiver pronto."""
     base_dir = os.path.realpath(os.path.dirname(os.path.dirname(__file__)))
     # .git também pode ser um arquivo (git worktree). Verifica ancestrais
@@ -214,7 +214,8 @@ def start_update_process(version_tag):
     # sem atualização. Só chamamos app.quit() se o processo realmente subiu.
     try:
         process = subprocess.Popen(
-            ["bash", updater_script, tag, str(os.getpid()), status_file],
+            ["bash", updater_script, tag, str(os.getpid()), status_file,
+             "keep" if autostart is None else "enable" if autostart else "disable"],
             cwd=base_dir,
             stdout=log_stream,
             stderr=subprocess.STDOUT,

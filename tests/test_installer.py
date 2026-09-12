@@ -1,6 +1,7 @@
 """Testa o instalador sem sudo, rede ou alterações fora de diretórios temporários."""
 import json
 import os
+import shutil
 import shlex
 import subprocess
 import sys
@@ -30,6 +31,7 @@ class TestInstaller(unittest.TestCase):
         self.env = dict(
             os.environ,
             BASEUS_INSTALL_DIR=str(self.install),
+            BASEUS_UI_LANGUAGE="pt",
             BASEUS_UPDATE_LOCK_FILE=str(self.root / "update-lock"),
             PATH=f"{self.bin}:{os.environ['PATH']}",
             TEST_INSTALL_ROOT=str(self.root),
@@ -84,6 +86,8 @@ esac
         release = self.root / "release"
         (release / "app").mkdir(parents=True)
         (release / "app/__init__.py").write_text("")
+        shutil.copyfile(ROOT / "app/i18n.py", release / "app/i18n.py")
+        shutil.copytree(ROOT / "app/translations", release / "app/translations")
         (release / "app/uninstall.py").write_text("""import os, pathlib, sys
 if len(sys.argv) == 3 and sys.argv[1] == '--register-desktop':
     destination = pathlib.Path(os.environ['XDG_DATA_HOME']) / 'applications'
@@ -133,6 +137,8 @@ if len(sys.argv) == 3 and sys.argv[1] == '--register-desktop':
                 result = self.run_installer("--autostart")
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertEqual((self.install / "version").read_text(), "2.0.0\n")
+                self.assertEqual((self.install / "app/translations/baseus_en.qm").read_bytes(),
+                                 (ROOT / "app/translations/baseus_en.qm").read_bytes())
                 self.assertIn("/releases/latest", self.calls.read_text())
                 self.assertIn(f"/archive/refs/tags/{tag}.tar.gz", self.calls.read_text())
                 entrypoint = self.install / ".venv/bin/entrypoint"
@@ -154,6 +160,14 @@ if len(sys.argv) == 3 and sys.argv[1] == '--register-desktop':
         result = self.run_installer("--no-autostart")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual((destination / "version").read_text(), "2.0.0\n")
+        self.assertFalse((self.root / "config/autostart/baseus-presenter.desktop").exists())
+
+    def test_installer_selects_english_from_system_language(self):
+        self.env.pop("BASEUS_UI_LANGUAGE")
+        self.env["LANGUAGE"] = "en_US"
+        result = self.run_piped_installer("n\n")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Start Baseus Presenter automatically", result.stdout)
         self.assertFalse((self.root / "config/autostart/baseus-presenter.desktop").exists())
 
     def test_piped_install_accepts_uppercase_no(self):

@@ -16,6 +16,7 @@ CONFIG_VERSION = 2
 
 DEFAULT_CONFIG = {
     "config_version": CONFIG_VERSION,
+    "ui_language": "auto",
     "close_behavior": "quit",
     "save_dir": os.path.expanduser("~"),
     "models": [],               # Catálogo Global de Modelos

@@ -109,6 +109,9 @@ class TestUninstall(unittest.TestCase):
 
     def test_wrapper_real_abre_aviso_e_enter_cancela(self):
         shutil.copyfile(uninstall.__file__, self.install / "app/uninstall.py")
+        from app import i18n
+        shutil.copyfile(i18n.__file__, self.install / "app/i18n.py")
+        shutil.copytree(i18n.TRANSLATIONS, self.install / "app/translations")
         (self.install / "uninstall.sh").write_text(uninstall.WRAPPER)
         result = subprocess.run(
             ["bash", str(self.install / "uninstall.sh")], input="\n",

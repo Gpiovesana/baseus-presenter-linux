@@ -59,6 +59,7 @@ class TestRecordingWiring(unittest.TestCase):
                  mock.patch.object(baseus_app, "acquire_single_instance_lock", return_value=(io.StringIO(), "unused")), \
                  mock.patch.object(baseus_app, "QApplication") as app_type, \
                  mock.patch.object(baseus_app, "Config", return_value=config), \
+                 mock.patch.object(baseus_app, "install_translator"), \
                  mock.patch.object(baseus_app, "HardwareReader", return_value=hardware), \
                  mock.patch.object(baseus_app, "AudioThread", return_value=audio), \
                  mock.patch.object(baseus_app, "PointerWindow", return_value=overlay), \

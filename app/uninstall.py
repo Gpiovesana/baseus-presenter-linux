@@ -9,6 +9,11 @@ import subprocess
 import sys
 import time
 
+if __package__:
+    from .i18n import tr, configure_standalone
+else:
+    from i18n import tr, configure_standalone
+
 UDEV_RULE = Path("/etc/udev/rules.d/99-baseus-presenter.rules")
 
 WRAPPER = '''#!/bin/bash
@@ -21,21 +26,21 @@ exec /usr/bin/python3 "$SCRIPT_DIR/app/uninstall.py" "$SCRIPT_DIR"
 def validate_installation(directory):
     requested = Path(directory)
     if not requested.is_absolute() or requested.is_symlink():
-        raise ValueError("O destino deve ser uma pasta absoluta, sem link simbólico.")
+        raise ValueError(tr('O destino deve ser uma pasta absoluta, sem link simbólico.'))
     target = requested.resolve(strict=True)
     home = Path.home().resolve()
     if target == home or target in home.parents or target == Path("/"):
-        raise ValueError("Diretório de desinstalação inseguro.")
+        raise ValueError(tr('Diretório de desinstalação inseguro.'))
     if any((parent / ".git/HEAD").is_file() or (parent / ".git").is_file()
            or (parent / ".git").is_symlink()
            for parent in (target, *target.parents)):
-        raise ValueError("Desinstalação bloqueada em checkout de desenvolvimento.")
+        raise ValueError(tr('Desinstalação bloqueada em checkout de desenvolvimento.'))
     if target.stat().st_uid != os.getuid():
-        raise ValueError("A instalação pertence a outro usuário.")
+        raise ValueError(tr('A instalação pertence a outro usuário.'))
     for name in ("baseus_app.py", "version", "app/uninstall.py"):
         item = target / name
         if not item.is_file() or item.is_symlink() or not item.resolve().is_relative_to(target):
-            raise ValueError("Esta pasta não parece uma instalação válida do Baseus Presenter.")
+            raise ValueError(tr('Esta pasta não parece uma instalação válida do Baseus Presenter.'))
     return target
 
 
@@ -54,19 +59,21 @@ def desktop_quote(value):
 def register_desktop(directory):
     target = validate_installation(directory)
     if "\n" in str(target) or "\r" in str(target):
-        raise ValueError("Caminho de instalação inválido.")
+        raise ValueError(tr('Caminho de instalação inválido.'))
     # O updater antigo copia app/, mas não uninstall.sh. Permite a migração.
     wrapper = target / "uninstall.sh"
     if wrapper.is_symlink():
-        raise ValueError("O desinstalador não pode ser um link simbólico.")
+        raise ValueError(tr('O desinstalador não pode ser um link simbólico.'))
     if not wrapper.exists():
         wrapper.write_text(WRAPPER, encoding="utf-8")
     launcher = desktop_path()
     launcher.parent.mkdir(parents=True, exist_ok=True)
     launcher.write_text(
         "[Desktop Entry]\nType=Application\n"
-        "Name=Desinstalar Baseus Presenter\n"
-        "Comment=Remover o aplicativo (pede confirmação antes de continuar)\n"
+        "Name=Uninstall Baseus Presenter\n"
+        "Name[pt]=Desinstalar Baseus Presenter\n"
+        "Comment=Remove the application (confirmation required)\n"
+        "Comment[pt]=Remover o aplicativo (pede confirmação antes de continuar)\n"
         f"Exec=/bin/bash {desktop_quote(wrapper)}\n"
         "Icon=edit-delete\nTerminal=true\nCategories=Utility;\nStartupNotify=false\n",
         encoding="utf-8",
@@ -85,7 +92,7 @@ def open_lock(path):
     fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     if os.fstat(fd).st_uid != os.getuid():
         os.close(fd)
-        raise ValueError("Arquivo de trava pertence a outro usuário.")
+        raise ValueError(tr('Arquivo de trava pertence a outro usuário.'))
     return os.fdopen(fd, "r+")
 
 
@@ -98,7 +105,7 @@ def stop_application(target, lock):
     lock.seek(0)
     pid = int(lock.read().strip())
     if pid <= 1 or pid == os.getpid():
-        raise ValueError("PID inválido. Feche o aplicativo e tente novamente.")
+        raise ValueError(tr('PID inválido. Feche o aplicativo e tente novamente.'))
     proc = Path(f"/proc/{pid}")
     args = (proc / "cmdline").read_bytes().split(b"\0")
     cwd = (proc / "cwd").resolve(strict=True)
@@ -106,8 +113,8 @@ def stop_application(target, lock):
     if proc.stat().st_uid != os.getuid() or not any(
         (cwd / os.fsdecode(arg)).resolve() == expected for arg in args[1:] if arg
     ):
-        raise ValueError("Outra instância está ativa. Feche o Baseus Presenter e tente novamente.")
-    print("Encerrando Baseus Presenter e liberando os dispositivos…", flush=True)
+        raise ValueError(tr('Outra instância está ativa. Feche o Baseus Presenter e tente novamente.'))
+    print(tr('Encerrando Baseus Presenter e liberando os dispositivos…'), flush=True)
     os.kill(pid, signal.SIGTERM)
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
@@ -116,7 +123,7 @@ def stop_application(target, lock):
             return
         except BlockingIOError:
             time.sleep(0.1)
-    raise RuntimeError("O aplicativo ainda está encerrando. Tente novamente quando ele fechar.")
+    raise RuntimeError(tr('O aplicativo ainda está encerrando. Tente novamente quando ele fechar.'))
 
 
 class UninstallProgress:
@@ -129,7 +136,7 @@ class UninstallProgress:
             try:
                 self.process = subprocess.Popen(
                     [zenity, "--progress", "--pulsate", "--auto-close", "--no-cancel",
-                     "--title=Desinstalando Baseus Presenter", "--text=Preparando desinstalação…",
+                     "--title=" + tr("Desinstalando Baseus Presenter"), "--text=" + tr("Preparando desinstalação…"),
                      "--width=460"],
                     stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL, text=True, cwd="/tmp",
@@ -165,22 +172,22 @@ class UninstallProgress:
 
 def remove_installation(directory, progress=None):
     report = progress or (lambda message: print(message, flush=True))
-    report("Verificando a instalação…")
+    report(tr('Verificando a instalação…'))
     if os.geteuid() == 0:
-        raise ValueError("Execute como seu usuário normal; a senha será pedida apenas para a regra USB.")
+        raise ValueError(tr('Execute como seu usuário normal; a senha será pedida apenas para a regra USB.'))
     target = validate_installation(directory)
     update_lock = Path(os.environ.get("BASEUS_UPDATE_LOCK_FILE", str(target) + ".update-lock"))
     with open_lock(update_lock) as update, open_lock(app_lock_path()) as app:
         try:
             fcntl.flock(update, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise RuntimeError("Há uma instalação ou atualização em andamento. Tente novamente depois.")
-        report("Encerrando o aplicativo e liberando os dispositivos…")
+            raise RuntimeError(tr('Há uma instalação ou atualização em andamento. Tente novamente depois.'))
+        report(tr('Encerrando o aplicativo e liberando os dispositivos…'))
         stop_application(target, app)
         rule = UDEV_RULE
         if rule.exists():
-            report("Removendo permissões USB… Se solicitado, digite sua senha no terminal.")
-            print("A remoção da regra USB requer sua senha administrativa.", flush=True)
+            report(tr('Removendo permissões USB… Se solicitado, digite sua senha no terminal.'))
+            print(tr('A remoção da regra USB requer sua senha administrativa.'), flush=True)
             subprocess.run(["sudo", "rm", "--", str(rule)], check=True)
             subprocess.run(["sudo", "udevadm", "control", "--reload-rules"], check=True)
             subprocess.run(["sudo", "udevadm", "trigger"], check=True)
@@ -188,15 +195,16 @@ def remove_installation(directory, progress=None):
         config = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
         validate_installation(target)
         os.chdir(target.parent)
-        report("Removendo os arquivos do aplicativo…")
+        report(tr('Removendo os arquivos do aplicativo…'))
         shutil.rmtree(target)
-        report("Removendo atalhos e inicialização automática…")
+        report(tr('Removendo atalhos e inicialização automática…'))
         for launcher in (data / "applications/baseus-presenter.desktop",
                          desktop_path(), config / "autostart/baseus-presenter.desktop"):
             launcher.unlink(missing_ok=True)
 
 
 def main(argv=None):
+    configure_standalone()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--register-desktop", action="store_true")
     parser.add_argument("directory")
@@ -204,35 +212,35 @@ def main(argv=None):
     if args.register_desktop:
         register_desktop(args.directory)
         return 0
-    print("AVISO — DESINSTALAR BASEUS PRESENTER\n")
-    print(f"Será removida a pasta inteira: {args.directory}")
-    print("Inclui aplicativo, ambiente virtual, atalhos e regra USB.")
-    print("Configurações, modelos e transcrições FORA dessa pasta serão preservados.")
-    print("Arquivos pessoais guardados DENTRO dela também serão apagados.\n")
+    print(tr('AVISO — DESINSTALAR BASEUS PRESENTER\n'))
+    print(tr('Será removida a pasta inteira: {0}', args.directory))
+    print(tr('Inclui aplicativo, ambiente virtual, atalhos e regra USB.'))
+    print(tr('Configurações, modelos e transcrições FORA dessa pasta serão preservados.'))
+    print(tr('Arquivos pessoais guardados DENTRO dela também serão apagados.\n'))
     try:
         validate_installation(args.directory)
-        answer = input("Digite desinstalar para confirmar (maiúsculas ou minúsculas; Enter cancela): ")
+        answer = input(tr('Digite desinstalar para confirmar (maiúsculas ou minúsculas; Enter cancela): '))
         if answer.strip().lower() != "desinstalar":
-            print("Cancelado. Nenhum arquivo foi removido.")
+            print(tr('Cancelado. Nenhum arquivo foi removido.'))
             return 0
         progress = UninstallProgress()
         try:
             remove_installation(args.directory, progress=progress.update)
         finally:
             progress.close()
-        print("\nDesinstalação concluída. Os arquivos removidos não foram enviados à lixeira.")
-        print("Dados externos preservados, incluindo ~/.config/baseus_presenter e ~/.config/baseus_pointer.")
+        print(tr('\nDesinstalação concluída. Os arquivos removidos não foram enviados à lixeira.'))
+        print(tr('Dados externos preservados, incluindo ~/.config/baseus_presenter e ~/.config/baseus_pointer.'))
         result = 0
     except (EOFError, KeyboardInterrupt):
-        print("\nOperação interrompida.")
+        print(tr('\nOperação interrompida.'))
         return 1
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
-        print(f"\nNão foi possível concluir a desinstalação: {error}")
-        print("Se a remoção já começou, alguns itens podem ter sido removidos.")
+        print(tr('\nNão foi possível concluir a desinstalação: {0}', error))
+        print(tr('Se a remoção já começou, alguns itens podem ter sido removidos.'))
         result = 1
     if sys.stdin.isatty():
         try:
-            input("Pressione Enter para fechar…")
+            input(tr('Pressione Enter para fechar…'))
         except (EOFError, KeyboardInterrupt):
             pass
     return result

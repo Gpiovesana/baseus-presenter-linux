@@ -1,3 +1,4 @@
+from .i18n import tr
 # ~/Documentos/Projetos/baseus-presenter-linux/app/audio.py
 import os
 import json
@@ -156,7 +157,7 @@ class AudioThread(QThread):
         """
         if state:
             if not self.model:
-                self.audio_error.emit("⚠️ IA de Voz ausente!")
+                self.audio_error.emit(tr('⚠️ IA de Voz ausente!'))
                 return  # is_recording permanece no valor anterior (False)
 
             pasta = self.config.get("save_dir", os.path.expanduser("~"))
@@ -172,7 +173,7 @@ class AudioThread(QThread):
                 # Pasta sem permissao / disco cheio: avisa em vez de deixar
                 # o estado "ativo" sem nenhum arquivo de saida por baixo.
                 log.exception(f"Não foi possível criar o arquivo de transcrição: {exc}")
-                self.audio_error.emit("⚠️ Falha ao criar o arquivo da aula!")
+                self.audio_error.emit(tr('⚠️ Falha ao criar o arquivo da aula!'))
                 return  # is_recording permanece False; nada foi validado ainda
 
             # So agora, com modelo E arquivo confirmados, ativa o estado.
@@ -183,9 +184,9 @@ class AudioThread(QThread):
 
             # Avisa se está silencioso ou com legenda
             if self.config.get_audio("show_subtitles", True):
-                self.audio_warning.emit("🎙️ Gravação Iniciada (Com Legendas)!")
+                self.audio_warning.emit(tr('🎙️ Gravação Iniciada (Com Legendas)!'))
             else:
-                self.audio_warning.emit("🎙️ Gravação Silenciosa Iniciada (Salvando no TXT)!")
+                self.audio_warning.emit(tr('🎙️ Gravação Silenciosa Iniciada (Salvando no TXT)!'))
         else:
             # #7: pausar nao pode simplesmente descartar o txt_path — pode
             # haver uma fala em andamento que o Vosk ainda nao fechou (nao
@@ -202,16 +203,16 @@ class AudioThread(QThread):
                     self._pending_finalize = True
                 self.txt_path = None
             self.is_recording = False
-            self.audio_warning.emit("⏸️ Gravação Pausada.")
+            self.audio_warning.emit(tr('⏸️ Gravação Pausada.'))
 
     def set_translating(self, state):
         self.is_translating = state
         if state and not ARGOS_AVAILABLE:
-            self.audio_warning.emit("⚠️ Argos Translate não instalado!")
+            self.audio_warning.emit(tr('⚠️ Argos Translate não instalado!'))
         elif state:
-            self.audio_warning.emit("🌐 Tradução Simultânea ON!")
+            self.audio_warning.emit(tr('🌐 Tradução Simultânea ON!'))
         else:
-            self.audio_warning.emit("🌐 Tradução Simultânea OFF.")
+            self.audio_warning.emit(tr('🌐 Tradução Simultânea OFF.'))
 
     def trigger_reload(self):
         """
@@ -247,7 +248,7 @@ class AudioThread(QThread):
         except Exception as e:
             log.exception(f"Falha ao carregar Vosk: {e}")
             self.model, self.recognizer = None, None
-            self.audio_warning.emit("⚠️ Falha ao carregar o modelo de voz!")
+            self.audio_warning.emit(tr('⚠️ Falha ao carregar o modelo de voz!'))
 
     def _log_queue_overflow(self):
         """Log com throttling para não inundar o arquivo quando a fila enche."""
@@ -431,7 +432,7 @@ class AudioThread(QThread):
                 "'python3 tools/diagnose_audio.py all' para comparar os "
                 "caminhos de captura."
             )
-            self.audio_warning.emit("⚠️ Microfone sem sinal! Verifique o dispositivo.")
+            self.audio_warning.emit(tr('⚠️ Microfone sem sinal! Verifique o dispositivo.'))
         elif pico >= _LEVEL_SILENCE_RMS:
             # Voltou a chegar áudio: rearma o aviso para uma próxima queda.
             self._level_warned = False
@@ -481,7 +482,7 @@ class AudioThread(QThread):
                 device_id = self._get_device_id()
             except Exception as e:
                 log.error(f"Erro ao identificar dispositivo de áudio: {e}")
-                self.audio_warning.emit("⚠️ Falha ao detectar dispositivo de áudio!")
+                self.audio_warning.emit(tr('⚠️ Falha ao detectar dispositivo de áudio!'))
                 self._wait_before_retry()
                 continue
 
@@ -500,9 +501,9 @@ class AudioThread(QThread):
                 # app ainda estiver rodando, tenta reabrir o stream.
                 log.exception(f"Erro no SoundDevice: {e}")
                 if self.is_recording:
-                    self._fail_active_recording("⚠️ Gravação interrompida: falha no dispositivo de áudio!")
+                    self._fail_active_recording(tr('⚠️ Gravação interrompida: falha no dispositivo de áudio!'))
                 else:
-                    self.audio_error.emit("⚠️ Falha no dispositivo de áudio! Verifique o microfone.")
+                    self.audio_error.emit(tr('⚠️ Falha no dispositivo de áudio! Verifique o microfone.'))
                 self._wait_before_retry()
                 continue
 
@@ -584,7 +585,7 @@ class AudioThread(QThread):
                                     # depois do início da sessão.
                                     log.exception(f"Falha ao gravar transcrição: {exc}")
                                     self._fail_active_recording(
-                                        "⚠️ Gravação interrompida: falha ao salvar no arquivo da aula!"
+                                        tr('⚠️ Gravação interrompida: falha ao salvar no arquivo da aula!')
                                     )
                     else:
                         res = json.loads(self.recognizer.PartialResult())
@@ -613,7 +614,7 @@ class AudioThread(QThread):
                 return argostranslate.translate.translate(text, source_lang, target_lang)
             except Exception as e:
                 self.audio_warning.emit(
-                    f"⚠️ Erro de Tradução: Pacote {source_lang}->{target_lang} ausente!")
+                    tr('⚠️ Erro de Tradução: Pacote {0}->{1} ausente!', source_lang, target_lang))
                 log.warning(f"Erro Argos: {e}")
                 return text
         return text

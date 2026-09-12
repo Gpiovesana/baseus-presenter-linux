@@ -816,10 +816,12 @@ class MainWindow(QMainWindow):
 
     def request_uninstall(self):
         """Abre o aviso no terminal; o aplicativo só fecha após a confirmação."""
+        if getattr(self, "_uninstall_pending", False):
+            return
         target = Path(__file__).resolve().parents[1]
         try:
             register_desktop(target)
-            terminal = shutil.which("x-terminal-emulator") or shutil.which("xterm")
+            terminal = shutil.which("xterm") or shutil.which("x-terminal-emulator")
             if not terminal:
                 raise RuntimeError("Nenhum terminal encontrado. Use o atalho Desinstalar Baseus Presenter no menu de aplicativos.")
             result = QProcess.startDetached(
@@ -827,6 +829,28 @@ class MainWindow(QMainWindow):
             started = result[0] if isinstance(result, tuple) else result
             if not started:
                 raise RuntimeError("Não foi possível abrir o terminal de desinstalação.")
+            if isinstance(result, tuple) and result[1] > 0:
+                pid = result[1]
+                self._uninstall_pending = True
+                self.btn_uninstall.setEnabled(False)
+                self.btn_uninstall.setText("Desinstalação aberta…")
+                timer = QTimer(self)
+                self._uninstall_timer = timer
+
+                def check_terminal():
+                    try:
+                        os.kill(pid, 0)
+                    except ProcessLookupError:
+                        timer.stop()
+                        timer.deleteLater()
+                        self._uninstall_pending = False
+                        self.btn_uninstall.setEnabled(True)
+                        self.btn_uninstall.setText("Desinstalar Baseus Presenter…")
+                    except PermissionError:
+                        pass
+
+                timer.timeout.connect(check_terminal)
+                timer.start(500)
         except (OSError, ValueError, RuntimeError) as error:
             QMessageBox.warning(self, "Desinstalação", str(error))
 

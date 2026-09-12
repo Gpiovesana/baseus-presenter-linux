@@ -65,6 +65,10 @@ bash install.sh
 
 ## Atualização
 
+Após confirmar, uma janela mostra a etapa de preparação da atualização e impede
+novos cliques. O aplicativo fecha quando o download e a preparação terminam,
+para concluir a troca e reiniciar. Falhas de preparação são exibidas na tela.
+
 Na janela de atualização, a opção **Iniciar o Baseus Presenter automaticamente ao
 entrar no sistema** reflete a configuração atual. Marque ou desmarque antes de
 clicar em **Atualizar**. A escolha só é aplicada após a nova versão abrir com
@@ -78,7 +82,11 @@ Abra **Configurações → Geral → Desinstalar Baseus Presenter…**, ou procu
 **Desinstalar Baseus Presenter** no menu de aplicativos. O terminal primeiro
 mostra um aviso: é necessário digitar `DESINSTALAR` para continuar. Enter ou
 fechar o terminal cancela. A senha administrativa é solicitada somente para
-remover a regra USB.
+remover a regra USB. A confirmação aceita maiúsculas, minúsculas ou letras misturadas.
+
+Após confirmar, uma janela independente mostra o progresso da desinstalação.
+As etapas e o resultado também aparecem no terminal, inclusive se a janela não
+estiver disponível. Novas instalações incluem o Zenity, usado para essa janela.
 
 O aplicativo é encerrado antes da remoção. A pasta de instalação inteira,
 o ambiente virtual, os atalhos e a inicialização automática são removidos.
@@ -198,6 +206,10 @@ bash install.sh
 
 ## Updates
 
+After confirmation, a progress window shows the preparation stage and blocks
+repeated clicks. The app closes after download and preparation to complete the
+replacement and restart. Preparation failures are displayed on screen.
+
 The update dialog includes **Iniciar o Baseus Presenter automaticamente ao entrar
 no sistema** (Start Baseus Presenter automatically when you sign in), initially
 set to the current configuration. Check or uncheck it before clicking **Atualizar**
@@ -213,7 +225,11 @@ Open **Configurações → Geral → Desinstalar Baseus Presenter…** (Settings
 your applications menu. The interface labels are currently in Portuguese.
 The terminal first displays a warning: you must type `DESINSTALAR` to continue.
 Pressing Enter or closing the terminal cancels. Your administrator password is
-requested only to remove the USB permission rule.
+requested only to remove the USB permission rule. Confirmation is case-insensitive.
+
+After confirmation, an independent window shows uninstallation progress. Steps
+and the result also appear in the terminal, including when the progress window
+is unavailable. New installations include Zenity, which provides this window.
 
 The application exits before removal. The entire installation folder, virtual
 environment, shortcuts, and autostart entry are removed. Settings, models, and

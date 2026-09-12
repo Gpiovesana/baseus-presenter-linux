@@ -119,7 +119,53 @@ def stop_application(target, lock):
     raise RuntimeError("O aplicativo ainda está encerrando. Tente novamente quando ele fechar.")
 
 
-def remove_installation(directory):
+class UninstallProgress:
+    """Janela independente da instalação; mantém feedback no terminal sem GUI."""
+
+    def __init__(self):
+        self.process = None
+        zenity = shutil.which("zenity")
+        if zenity:
+            try:
+                self.process = subprocess.Popen(
+                    [zenity, "--progress", "--pulsate", "--auto-close", "--no-cancel",
+                     "--title=Desinstalando Baseus Presenter", "--text=Preparando desinstalação…",
+                     "--width=460"],
+                    stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL, text=True, cwd="/tmp",
+                )
+            except OSError:
+                pass
+
+    def update(self, message):
+        print(message, flush=True)
+        if self.process is not None and self.process.poll() is None:
+            try:
+                self.process.stdin.write("# " + message + "\n")
+                self.process.stdin.flush()
+            except (OSError, ValueError):
+                pass
+
+    def close(self):
+        if self.process is not None:
+            try:
+                self.process.stdin.close()
+            except OSError:
+                pass
+            try:
+                self.process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self.process.terminate()
+                try:
+                    self.process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+                    self.process.wait()
+
+
+def remove_installation(directory, progress=None):
+    report = progress or (lambda message: print(message, flush=True))
+    report("Verificando a instalação…")
     if os.geteuid() == 0:
         raise ValueError("Execute como seu usuário normal; a senha será pedida apenas para a regra USB.")
     target = validate_installation(directory)
@@ -129,9 +175,11 @@ def remove_installation(directory):
             fcntl.flock(update, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise RuntimeError("Há uma instalação ou atualização em andamento. Tente novamente depois.")
+        report("Encerrando o aplicativo e liberando os dispositivos…")
         stop_application(target, app)
         rule = UDEV_RULE
         if rule.exists():
+            report("Removendo permissões USB… Se solicitado, digite sua senha no terminal.")
             print("A remoção da regra USB requer sua senha administrativa.", flush=True)
             subprocess.run(["sudo", "rm", "--", str(rule)], check=True)
             subprocess.run(["sudo", "udevadm", "control", "--reload-rules"], check=True)
@@ -140,7 +188,9 @@ def remove_installation(directory):
         config = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
         validate_installation(target)
         os.chdir(target.parent)
+        report("Removendo os arquivos do aplicativo…")
         shutil.rmtree(target)
+        report("Removendo atalhos e inicialização automática…")
         for launcher in (data / "applications/baseus-presenter.desktop",
                          desktop_path(), config / "autostart/baseus-presenter.desktop"):
             launcher.unlink(missing_ok=True)
@@ -161,11 +211,15 @@ def main(argv=None):
     print("Arquivos pessoais guardados DENTRO dela também serão apagados.\n")
     try:
         validate_installation(args.directory)
-        answer = input("Digite DESINSTALAR para confirmar (Enter cancela): ")
-        if answer.strip() != "DESINSTALAR":
+        answer = input("Digite desinstalar para confirmar (maiúsculas ou minúsculas; Enter cancela): ")
+        if answer.strip().lower() != "desinstalar":
             print("Cancelado. Nenhum arquivo foi removido.")
             return 0
-        remove_installation(args.directory)
+        progress = UninstallProgress()
+        try:
+            remove_installation(args.directory, progress=progress.update)
+        finally:
+            progress.close()
         print("\nDesinstalação concluída. Os arquivos removidos não foram enviados à lixeira.")
         print("Dados externos preservados, incluindo ~/.config/baseus_presenter e ~/.config/baseus_pointer.")
         result = 0

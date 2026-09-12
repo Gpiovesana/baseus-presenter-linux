@@ -7,8 +7,8 @@ from pathlib import Path
 import urllib.error
 import urllib.request
 
-from PyQt5.QtCore import QObject, QThread, QTimer, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QMessageBox
+from PyQt5.QtCore import QObject, QThread, QTimer, Qt, pyqtSignal
+from PyQt5.QtWidgets import QApplication, QMessageBox, QProgressDialog
 
 from .logger import get_logger
 
@@ -242,8 +242,26 @@ def start_update_process(version_tag, autostart=None):
     app._baseus_update_timer = timer
     app._baseus_update_status_file = status_file
     app._baseus_update_log_file = log_file
+    progress = QProgressDialog("Preparando atualização… Aguarde.", None, 0, 0)
+    progress.setWindowTitle("Atualizando Baseus Presenter")
+    progress.setWindowModality(Qt.ApplicationModal)
+    progress.setWindowFlags(progress.windowFlags() & ~Qt.WindowCloseButtonHint)
+    progress.setCancelButton(None)
+    progress.setMinimumDuration(0)
+    progress.show()
+    app._baseus_update_progress = progress
 
     def poll_update_preparation():
+        try:
+            with open(log_file, "rb") as stream:
+                stream.seek(0, os.SEEK_END)
+                stream.seek(max(0, stream.tell() - 4096))
+                lines = stream.read().decode("utf-8", errors="replace").splitlines()
+            stages = [line for line in lines if line.startswith(("🔄", "📥", "📦", "🐍", "⏳"))]
+            if stages:
+                progress.setLabelText(stages[-1] + "\n\nAguarde. O aplicativo será reiniciado ao concluir.")
+        except OSError:
+            pass
         try:
             with open(status_file, "r", encoding="utf-8") as stream:
                 status = stream.read().strip()
@@ -253,6 +271,9 @@ def start_update_process(version_tag, autostart=None):
         return_code = process.poll()
         if status == "READY" and (return_code is None or return_code == 0):
             timer.stop()
+            progress.close()
+            progress.deleteLater()
+            app._baseus_update_progress = None
             log.info("Atualização preparada; encerrando o aplicativo para concluir a troca.")
             app.quit()
             return
@@ -261,6 +282,9 @@ def start_update_process(version_tag, autostart=None):
             return
 
         timer.stop()
+        progress.close()
+        progress.deleteLater()
+        app._baseus_update_progress = None
         try:
             with open(log_file, "r", encoding="utf-8", errors="replace") as stream:
                 details = stream.read().strip()

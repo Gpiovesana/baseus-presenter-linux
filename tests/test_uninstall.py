@@ -1,5 +1,6 @@
 """Safety and transaction tests for the standalone uninstaller."""
 import fcntl
+import io
 import os
 import subprocess
 import shutil
@@ -44,7 +45,7 @@ class TestUninstall(unittest.TestCase):
         self.addCleanup(self.env.stop)
 
     def test_confirmation_cancel_and_eof_never_remove(self):
-        for answer in ("", "no"):
+        for answer in ("", "no", "sim", "desinstala", "desinstalar agora"):
             with self.subTest(answer=answer), \
                     mock.patch("builtins.input", return_value=answer), \
                     mock.patch.object(uninstall, "remove_installation") as remove:
@@ -57,10 +58,14 @@ class TestUninstall(unittest.TestCase):
             remove.assert_not_called()
 
     def test_explicit_confirmation_calls_removal(self):
-        with mock.patch("builtins.input", return_value="DESINSTALAR"), \
-                mock.patch.object(uninstall, "remove_installation") as remove:
-            self.assertEqual(uninstall.main([str(self.install)]), 0)
-            remove.assert_called_once_with(str(self.install))
+        for answer in ("DESINSTALAR", "desinstalar", "Desinstalar", "dEsInStAlAr"):
+            with self.subTest(answer=answer), \
+                    mock.patch("builtins.input", return_value=answer), \
+                    mock.patch.object(uninstall, "UninstallProgress") as progress_type, \
+                    mock.patch.object(uninstall, "remove_installation") as remove:
+                self.assertEqual(uninstall.main([str(self.install)]), 0)
+                remove.assert_called_once_with(str(self.install), progress=progress_type.return_value.update)
+                progress_type.return_value.close.assert_called_once()
 
     def test_validation_rejects_root_home_symlink_and_invalid_directories(self):
         with self.assertRaises(ValueError):
@@ -179,11 +184,12 @@ class TestUninstall(unittest.TestCase):
         external.mkdir(parents=True)
         (external / "keep.dat").write_text("keep", encoding="utf-8")
 
+        stages = []
         with mock.patch.object(uninstall.os, "geteuid", return_value=1000), \
                 mock.patch.object(uninstall, "stop_application"), \
                 mock.patch.object(uninstall, "app_lock_path", return_value=self.runtime / "app.lock"), \
                 mock.patch.object(uninstall.subprocess, "run") as run:
-            uninstall.remove_installation(self.install)
+            uninstall.remove_installation(self.install, progress=lambda message: stages.append(message))
 
         self.assertFalse(self.install.exists())
         self.assertFalse((self.data / "applications/baseus-presenter.desktop").exists())
@@ -191,6 +197,29 @@ class TestUninstall(unittest.TestCase):
         self.assertFalse((self.config / "autostart/baseus-presenter.desktop").exists())
         self.assertTrue((external / "keep.dat").exists())
         run.assert_not_called()
+        self.assertTrue(any("Encerrando" in message for message in stages))
+        self.assertTrue(any("arquivos" in message for message in stages))
+        self.assertTrue(any("atalhos" in message for message in stages))
+
+    def test_progress_window_reports_steps_and_closes(self):
+        process = mock.Mock()
+        process.stdin = io.StringIO()
+        process.poll.return_value = None
+        with mock.patch.object(uninstall.shutil, "which", return_value="/usr/bin/zenity"), \
+                mock.patch.object(uninstall.subprocess, "Popen", return_value=process):
+            progress = uninstall.UninstallProgress()
+            progress.update("Removendo arquivos…")
+            self.assertIn("Removendo arquivos", process.stdin.getvalue())
+            progress.close()
+            process.wait.assert_called_once()
+
+    def test_progress_unavailable_keeps_terminal_feedback(self):
+        with mock.patch.object(uninstall.shutil, "which", return_value=None), \
+                mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+            progress = uninstall.UninstallProgress()
+            progress.update("Removendo arquivos…")
+            progress.close()
+            self.assertIn("Removendo arquivos", output.getvalue())
 
     def test_update_lock_contention_aborts_before_removal(self):
         update_lock = Path(os.environ["BASEUS_UPDATE_LOCK_FILE"])

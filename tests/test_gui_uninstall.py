@@ -14,8 +14,16 @@ class TestGuiUninstall(GuiTestCase):
         with mock.patch.object(gui, "register_desktop"), \
                 mock.patch.object(gui.shutil, "which", return_value="/usr/bin/xterm"), \
                 mock.patch.object(gui.QProcess, "startDetached", return_value=(True, 123)) as start, \
+                mock.patch.object(gui, "QTimer") as timer_type, \
                 mock.patch.object(gui.qApp, "quit") as quit:
             win.request_uninstall()
+            self.assertFalse(win.btn_uninstall.isEnabled())
+            win.request_uninstall()
+            self.assertEqual(start.call_count, 1)
+            callback = timer_type.return_value.timeout.connect.call_args.args[0]
+            with mock.patch.object(gui.os, "kill", side_effect=ProcessLookupError):
+                callback()
+            self.assertTrue(win.btn_uninstall.isEnabled())
         args = start.call_args.args
         self.assertEqual(args[0], "/usr/bin/xterm")
         self.assertEqual(args[1][:2], ["-e", "/bin/bash"])

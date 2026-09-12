@@ -81,7 +81,7 @@ fi
 echo "📦 1/6 Instalando dependências de sistema..."
 sudo apt update
 sudo apt install -y curl python3 python3-venv python3-pip python3-dev build-essential \
-    libportaudio2 portaudio19-dev libxcb-cursor0 libxcb-xinerama0 xterm
+    libportaudio2 portaudio19-dev libxcb-cursor0 libxcb-xinerama0 xterm zenity
 
 echo "🛡️ 2/6 Configurando permissões de hardware (udev + uaccess)..."
 sudo tee /etc/udev/rules.d/99-baseus-presenter.rules > /dev/null <<'EOF'

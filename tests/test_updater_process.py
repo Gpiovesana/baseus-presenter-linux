@@ -84,12 +84,21 @@ class UpdateProcessTests(unittest.TestCase):
             )), mock.patch.object(updater.QApplication, "instance", return_value=app), \
                  mock.patch.object(updater, "QTimer", return_value=timer), \
                  mock.patch.object(updater.QMessageBox, "warning") as warning, \
-                 mock.patch.object(updater.subprocess, "Popen", return_value=process) as popen:
+                 mock.patch.object(updater.subprocess, "Popen", return_value=process) as popen, \
+                 mock.patch.object(updater, "QProgressDialog", create=True) as progress_type:
                 self.assertTrue(updater.start_update_process("v2.3.0", autostart=False), warning.call_args)
+                progress = progress_type.return_value
+                progress.show.assert_called_once()
+                self.assertFalse(updater.start_update_process("v2.3.0"))
+                self.assertEqual(popen.call_count, 1)
+                log_file.write_text("📥 Baixando release...\n", encoding="utf-8")
+                timer.callback()
+                self.assertIn("Baixando", progress.setLabelText.call_args.args[0])
                 self.assertTrue(timer.started)
                 app.quit.assert_not_called()
                 status.write_text("READY\n", encoding="utf-8")
                 timer.callback()
+                progress.close.assert_called_once()
 
             app.quit.assert_called_once_with()
             self.assertEqual(popen.call_args.args[0][-2], str(status))
@@ -121,11 +130,13 @@ class UpdateProcessTests(unittest.TestCase):
             )), mock.patch.object(updater.QApplication, "instance", return_value=app), \
                  mock.patch.object(updater, "QTimer", return_value=timer), \
                  mock.patch.object(updater.subprocess, "Popen", return_value=process), \
-                 mock.patch.object(updater.QMessageBox, "warning") as warning:
+                 mock.patch.object(updater.QMessageBox, "warning") as warning, \
+                 mock.patch.object(updater, "QProgressDialog", create=True) as progress_type:
                 self.assertTrue(updater.start_update_process("2.3.0"), warning.call_args)
                 status.write_text("ERROR\n", encoding="utf-8")
                 log_file.write_text("download recusado", encoding="utf-8")
                 timer.callback()
+                progress_type.return_value.close.assert_called_once()
 
             app.quit.assert_not_called()
             self.assertIn("download recusado", warning.call_args.args[2])

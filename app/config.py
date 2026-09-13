@@ -16,6 +16,7 @@ CONFIG_VERSION = 2
 
 DEFAULT_CONFIG = {
     "config_version": CONFIG_VERSION,
+    "ui_language": "auto",
     "close_behavior": "quit",
     "save_dir": os.path.expanduser("~"),
     "models": [],               # Catálogo Global de Modelos
@@ -37,7 +38,7 @@ DEFAULT_CONFIG = {
             },
             "audio": {
                 "selected_model_path": "",
-                "source_lang": "pt",  # #24: idioma do modelo Vosk selecionado
+                "source_lang": "pt",  # Legado; modelos selecionados usam models[].language.
                 "target_lang": "en",
                 # Índice do PortAudio: mantido apenas por compatibilidade.
                 # Índices NÃO são estáveis entre execuções.
@@ -277,6 +278,14 @@ class Config:
 
     def get_audio(self, key, default=None):
         with self._lock:
+            if key == "source_lang":
+                # Uma única fonte de verdade em todos os perfis. Não adivinhar
+                # o idioma de modelos antigos pelo default legado ou pela UI.
+                path = audio_cfg(self._data).get("selected_model_path")
+                if path:
+                    model = next((m for m in self._data.get("models", [])
+                                  if m.get("path") == path), {})
+                    return model.get("language") or None
             return copy.deepcopy(audio_cfg(self._data).get(key, default))
 
     def get_visual(self, key, default=None):

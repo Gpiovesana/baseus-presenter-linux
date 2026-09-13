@@ -10,6 +10,7 @@ from PyQt5.QtCore import QTimer
 
 from app.logger import get_logger
 from app.config import Config
+from app.i18n import install_translator
 from app.hardware import HardwareReader
 from app.audio import AudioThread
 from app.overlay import PointerWindow
@@ -87,6 +88,7 @@ def main():
     app.setQuitOnLastWindowClosed(False) # Mantém rodando mesmo se fechar a janela de config
 
     config = Config()
+    install_translator(app, config.get("ui_language", "auto"))
     log.info("Iniciando o Baseus Presenter (Versão 2.0 Modular)...")
 
     # 3. Instanciando os Módulos (Nenhum deles sabe que os outros existem)

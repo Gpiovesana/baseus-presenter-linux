@@ -1,6 +1,24 @@
 #!/bin/bash
 set -euo pipefail
 
+# Standalone installer messages cannot depend on downloaded Python modules.
+UI_LANGUAGE="${BASEUS_UI_LANGUAGE:-auto}"
+if [[ "$UI_LANGUAGE" != pt && "$UI_LANGUAGE" != en ]]; then
+    UI_LANGUAGE=en
+    LANGUAGE_CANDIDATES="${LANGUAGE:-}:${LC_ALL:-${LC_MESSAGES:-${LANG:-en}}}"
+    IFS=: read -r -a UI_CANDIDATES <<< "$LANGUAGE_CANDIDATES"
+    for candidate in "${UI_CANDIDATES[@]}"; do
+        case "$candidate" in
+            pt|pt_*|pt-*|pt.*) UI_LANGUAGE=pt; break ;;
+            en|en_*|en-*|en.*) UI_LANGUAGE=en; break ;;
+        esac
+    done
+fi
+ui_text() {
+    if [[ "$UI_LANGUAGE" == pt ]]; then printf '%s' "$1"; else printf '%s' "$2"; fi
+}
+say() { ui_text "$@"; printf '\n'; }
+
 REPO="Gpiovesana/baseus-presenter-linux"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="$(realpath -e -- "${BASEUS_INSTALL_DIR:-$SCRIPT_DIR}")"
@@ -17,7 +35,7 @@ VERSION="${RELEASE_TAG#v}"
 
 case "$AUTOSTART_CHOICE" in
     keep|enable|disable) ;;
-    *) echo "❌ Escolha de inicialização automática inválida."; exit 2 ;;
+    *) say "❌ Escolha de inicialização automática inválida." "❌ Invalid automatic startup choice."; exit 2 ;;
 esac
 
 # Só é chamado após a confirmação de abertura da nova versão.
@@ -57,20 +75,20 @@ PY_AUTOSTART
 
 if [[ ! "$VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]] ||
    [[ ! "$PID" =~ ^[0-9]+$ ]] || [[ -z "$PREPARED_FILE" ]]; then
-    echo "❌ Uso: ./updater.sh <versao> <pid_do_app> <arquivo_de_estado>"
+    say "❌ Uso: ./updater.sh <versao> <pid_do_app> <arquivo_de_estado>" "❌ Usage: ./updater.sh <version> <app_pid> <status_file>"
     exit 1
 fi
 
 # Proteção independente da GUI: nunca substitui um checkout, nem um worktree.
 if [[ "$INSTALL_DIR" == / || "$INSTALL_DIR" == "$(realpath -- "$HOME")" ||
       ! -f "$INSTALL_DIR/baseus_app.py" || ! -f "$INSTALL_DIR/version" ]]; then
-    echo "❌ Diretório de instalação inválido."
+    say "❌ Diretório de instalação inválido." "❌ Invalid installation directory."
     exit 1
 fi
 CHECK_DIR="$INSTALL_DIR"
 while :; do
     if [[ -f "$CHECK_DIR/.git" || -f "$CHECK_DIR/.git/HEAD" || -L "$CHECK_DIR/.git" ]]; then
-        echo "❌ Atualização bloqueada em checkout de desenvolvimento. Use o Git."
+        say "❌ Atualização bloqueada em checkout de desenvolvimento. Use o Git." "❌ Updates are blocked in development checkouts. Use Git."
         exit 1
     fi
     [[ "$CHECK_DIR" == / ]] && break
@@ -82,7 +100,7 @@ cd -- "$(dirname -- "$INSTALL_DIR")"
 
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
-    echo "❌ Outra atualização já está em andamento."
+    say "❌ Outra atualização já está em andamento." "❌ Another update is already in progress."
     exit 1
 fi
 
@@ -98,25 +116,33 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "🔄 Preparando Baseus Presenter v$VERSION..."
-echo "📥 Baixando release..."
+say "🔄 Preparando Baseus Presenter v$VERSION..." "🔄 Preparing Baseus Presenter v$VERSION..."
+say "📥 Baixando release..." "📥 Downloading release..."
 curl -sSL -f --connect-timeout 10 --max-time 180 \
     "https://github.com/$REPO/archive/refs/tags/$RELEASE_TAG.tar.gz" \
     -o "$TMP_DIR/release.tar.gz"
 
-echo "📦 Extraindo e validando pacote..."
+say "📦 Extraindo e validando pacote..." "📦 Extracting and validating package..."
 tar -xzf "$TMP_DIR/release.tar.gz" -C "$TMP_DIR"
 EXTRACTED_DIR="$(find "$TMP_DIR" -mindepth 1 -maxdepth 1 -type d -print -quit)"
 for file in app app/uninstall.py baseus_app.py requirements.txt version updater.sh uninstall.sh; do
     if [[ ! -e "$EXTRACTED_DIR/$file" ]]; then
-        echo "❌ Release inválida: '$file' não encontrado."
+        say "❌ Release inválida: '$file' não encontrado." "❌ Invalid release: '$file' not found."
         exit 1
     fi
 done
 
+if [[ -f "$EXTRACTED_DIR/app/i18n.py" ]]; then
+    for file in app/translations/baseus_en.ts app/translations/baseus_en.qm app/translations/baseus_pt.ts app/translations/baseus_pt.qm; do
+        if [[ ! -s "$EXTRACTED_DIR/$file" ]]; then
+            say "❌ Tradução ausente no pacote: $file" "❌ Translation missing from package: $file"
+            exit 1
+        fi
+    done
+fi
 RELEASE_VERSION="$(tr -d '[:space:]' < "$EXTRACTED_DIR/version")"
 if [[ "${RELEASE_VERSION#v}" != "$VERSION" ]]; then
-    echo "❌ Versão do pacote não confere (esperada: $VERSION; encontrada: $RELEASE_VERSION)."
+    say "❌ Versão do pacote não confere (esperada: $VERSION; encontrada: $RELEASE_VERSION)." "❌ Package version mismatch (expected: $VERSION; found: $RELEASE_VERSION)."
     exit 1
 fi
 
@@ -128,7 +154,7 @@ cp "$EXTRACTED_DIR/baseus_app.py" "$EXTRACTED_DIR/requirements.txt" \
    "$EXTRACTED_DIR/uninstall.sh" "$STAGING_DIR/"
 chmod +x "$STAGING_DIR/updater.sh" "$STAGING_DIR/uninstall.sh"
 
-echo "🐍 Preparando dependências em staging..."
+say "🐍 Preparando dependências em staging..." "🐍 Preparing dependencies..."
 python3 -m venv "$STAGING_DIR/.venv"
 "$STAGING_DIR/.venv/bin/python" -m pip install -q --upgrade pip
 "$STAGING_DIR/.venv/bin/python" -m pip install -q -r "$STAGING_DIR/requirements.txt"
@@ -152,20 +178,20 @@ PY_RELOCATE
 printf 'READY\n' > "$PREPARED_FILE"
 PREPARED=true
 
-echo "⏳ Aguardando o aplicativo encerrar..."
+say "⏳ Aguardando o aplicativo encerrar..." "⏳ Waiting for the application to close..."
 remaining=60
 while kill -0 "$PID" 2>/dev/null; do
     sleep 0.5
     remaining=$((remaining - 1))
     if [[ $remaining -le 0 ]]; then
-        echo "❌ O aplicativo não encerrou dentro do prazo."
+        say "❌ O aplicativo não encerrou dentro do prazo." "❌ The application did not close within the time limit."
         exit 1
     fi
 done
 
 # Recuperar antes deste ponto alteraria arquivos usados pelo aplicativo aberto.
 if [[ -f "$STATE_FILE" && -d "$BACKUP_DIR" ]]; then
-    echo "⚠️ Recuperando uma atualização anterior interrompida..."
+    say "⚠️ Recuperando uma atualização anterior interrompida..." "⚠️ Recovering an interrupted previous update..."
     rm -rf -- "$INSTALL_DIR"
     mv "$BACKUP_DIR" "$INSTALL_DIR"
     rm -f -- "$STATE_FILE"
@@ -176,7 +202,7 @@ if [[ -f "$INSTALL_DIR/version" ]]; then
     PREVIOUS_VERSION="$(tr -d '[:space:]' < "$INSTALL_DIR/version")"
 fi
 
-echo "🔄 Ativando a nova versão..."
+say "🔄 Ativando a nova versão..." "🔄 Activating the new version..."
 rm -rf -- "$BACKUP_DIR"
 # O estado só passa a existir depois de remover qualquer backup obsoleto.
 printf 'pending\ntarget=%s\nprevious=%s\n' \
@@ -186,7 +212,7 @@ mv "$INSTALL_DIR" "$BACKUP_DIR"
 if ! mv "$STAGING_DIR" "$INSTALL_DIR"; then
     mv "$BACKUP_DIR" "$INSTALL_DIR"
     rm -f -- "$STATE_FILE"
-    echo "❌ Falha ao ativar o staging; a versão anterior foi restaurada."
+    say "❌ Falha ao ativar o staging; a versão anterior foi restaurada." "❌ Failed to activate the prepared update; the previous version was restored."
     ( exec 9>&-; cd -- "$INSTALL_DIR"; exec "$INSTALL_DIR/.venv/bin/python" \
         "$INSTALL_DIR/baseus_app.py" >/dev/null 2>&1 ) &
     exit 1
@@ -209,15 +235,15 @@ done
 if [[ "$(cat "$STARTUP_READY_FILE" 2>/dev/null || true)" == "$new_pid" ]] &&
    kill -0 "$new_pid" 2>/dev/null && configure_autostart; then
     if ! python3 "$INSTALL_DIR/app/uninstall.py" --register-desktop "$INSTALL_DIR"; then
-        echo "⚠️ Não foi possível registrar o atalho de desinstalação; o aplicativo tentará novamente ao abrir."
+        say "⚠️ Não foi possível registrar o atalho de desinstalação; o aplicativo tentará novamente ao abrir." "⚠️ Could not register the uninstall shortcut; the application will retry when opened."
     fi
     rm -rf -- "$BACKUP_DIR"
     rm -f -- "$STATE_FILE"
-    echo "✅ Atualização para v$VERSION concluída com sucesso."
+    say "✅ Atualização para v$VERSION concluída com sucesso." "✅ Update to v$VERSION completed successfully."
     exit 0
 fi
 
-echo "⚠️ Falha ao iniciar ou configurar a nova versão; restaurando a anterior."
+say "⚠️ Falha ao iniciar ou configurar a nova versão; restaurando a anterior." "⚠️ Failed to start or configure the new version; restoring the previous one."
 if kill -0 "$new_pid" 2>/dev/null; then
     kill "$new_pid" 2>/dev/null || true
     remaining=10
@@ -235,5 +261,5 @@ mv "$BACKUP_DIR" "$INSTALL_DIR"
 rm -f -- "$STATE_FILE"
 ( exec 9>&-; cd -- "$INSTALL_DIR"; exec "$INSTALL_DIR/.venv/bin/python" \
     "$INSTALL_DIR/baseus_app.py" >/dev/null 2>&1 ) &
-echo "✓ Rollback concluído e versão anterior reiniciada."
+say "✓ Rollback concluído e versão anterior reiniciada." "✓ Rollback complete; the previous version was restarted."
 exit 1

@@ -1,5 +1,6 @@
 """Exercita a transação real com download e ambiente Python locais simulados."""
 import os
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -23,6 +24,7 @@ class TestUpdaterShell(unittest.TestCase):
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.env = dict(os.environ, BASEUS_INSTALL_DIR=str(self.install),
+                        BASEUS_UI_LANGUAGE="pt",
                         BASEUS_UPDATE_STATE_FILE=str(self.state),
                         BASEUS_UPDATE_LOCK_FILE=str(self.lock),
                         PATH=f"{self.bin}:{os.environ['PATH']}",
@@ -65,6 +67,8 @@ exit 1
         self.release = self.root / "release"
         (self.release / "app").mkdir(parents=True)
         (self.release / "app/__init__.py").write_text("")
+        shutil.copyfile(ROOT / "app/i18n.py", self.release / "app/i18n.py")
+        shutil.copytree(ROOT / "app/translations", self.release / "app/translations")
         (self.release / "app/uninstall.py").write_text("""import os, pathlib, sys
 if len(sys.argv) == 3 and sys.argv[1] == '--register-desktop':
     destination = pathlib.Path(os.environ['XDG_DATA_HOME']) / 'applications'
@@ -161,6 +165,12 @@ time.sleep(1)
         self.assertEqual((self.install / "version").read_text(), "1.0.0\n")
         self.assertEqual(self.status.read_text().strip(), "ERROR")
 
+    def test_missing_translation_rejects_package_before_replacement(self):
+        (self.release / "app/translations/baseus_en.qm").unlink()
+        result = self.run_update()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.install / "version").read_text(), "1.0.0\n")
+
     def test_pip_failure_preserves_installation_before_ready(self):
         self.env["FAIL_PIP"] = "1"
         result = self.run_update()
@@ -173,6 +183,8 @@ time.sleep(1)
         result = self.run_update()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual((self.install / "version").read_text(), "2.0.0\n")
+        self.assertEqual((self.install / "app/translations/baseus_en.qm").read_bytes(),
+                         (ROOT / "app/translations/baseus_en.qm").read_bytes())
         self.assertIn("/tags/2.0.0.tar.gz", (self.root / "curl-args").read_text())
         self.assertTrue((self.root / "started").exists())
         self.assertEqual((self.root / "startup-cwd").read_text(), str(self.install))

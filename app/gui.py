@@ -11,7 +11,7 @@ from pathlib import Path
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QSlider, QComboBox, QPushButton, QSystemTrayIcon, QMenu,
                              qApp, QTabWidget, QColorDialog, QFileDialog, QFormLayout, QInputDialog, QMessageBox, QCheckBox, QProgressDialog, QStyle)
-from PyQt5.QtCore import Qt, pyqtSignal, QThread, QTimer, QProcess
+from PyQt5.QtCore import Qt, pyqtSignal, QThread, QTimer, QProcess, QLocale
 from PyQt5.QtGui import QColor, QIcon, QPixmap, QPainter, QPen
 import sounddevice as sd
 
@@ -24,6 +24,7 @@ except ImportError:
 
 from .logger import get_logger
 from .config import Config
+from .i18n import tr
 from .uninstall import validate_installation, register_desktop
 
 log = get_logger(__name__)
@@ -74,7 +75,7 @@ class LanguageLoadThread(QThread):
     get_available_packages() faz I/O de rede/disco, a janela congelava até o
     timeout quando não havia internet — sem qualquer feedback ao usuário.
     """
-    loaded = pyqtSignal(list)   # [(nome_exibido, codigo), ...]
+    loaded = pyqtSignal(list)   # [(origem, nome_destino, codigo_destino), ...]
     failed = pyqtSignal(str)
 
     def run(self):
@@ -83,8 +84,9 @@ class LanguageLoadThread(QThread):
             # sempre numa conexão lenta/travada, sobrevivendo ao
             # encerramento do app.
             with socket_timeout(ARGOS_INDEX_TIMEOUT_S):
+                argostranslate.package.update_package_index()
                 pacotes = argostranslate.package.get_available_packages()
-            idiomas = [(p.to_name, p.to_code) for p in pacotes if p.from_code == "pt"]
+            idiomas = [(p.from_code, p.to_name, p.to_code) for p in pacotes]
             self.loaded.emit(idiomas)
         except Exception as e:
             log.exception(f"Erro ao carregar idiomas do Argos: {e}")
@@ -110,7 +112,7 @@ class PackageInstallThread(QThread):
 
             pkg = next((p for p in available if p.from_code == self.from_code and p.to_code == self.to_code), None)
             if not pkg:
-                self.finished.emit(False, "Pacote não encontrado no servidor.")
+                self.finished.emit(False, tr('Pacote não encontrado no servidor.'))
                 return
 
             # Timeout mais generoso: aqui são ~30MB. O timeout do socket é
@@ -121,11 +123,11 @@ class PackageInstallThread(QThread):
                 path = pkg.download()
 
             argostranslate.package.install_from_path(path)
-            self.finished.emit(True, "Instalação concluída!")
+            self.finished.emit(True, tr('Instalação concluída!'))
         except socket.timeout:
             log.error("Timeout de rede ao baixar o pacote de idioma do Argos.")
             self.finished.emit(
-                False, "Tempo de conexão esgotado. Verifique sua internet e tente de novo.")
+                False, tr('Tempo de conexão esgotado. Verifique sua internet e tente de novo.'))
         except Exception as e:
             log.exception(f"Falha na instalação do pacote de idioma: {e}")
             self.finished.emit(False, str(e))
@@ -143,6 +145,7 @@ class MainWindow(QMainWindow):
         self._last_input_device = _UNSET
         self.installer = None
         self._lang_loader = None
+        self._language_pairs = None
         # Mesmo padrão de overlay.py/audio.py: aceita tanto o dict cru quanto
         # o wrapper já embrulhado, para não depender de quem instancia primeiro.
         self.config = config if isinstance(config, Config) else Config(config)
@@ -150,9 +153,9 @@ class MainWindow(QMainWindow):
         self._save_timer.setSingleShot(True)
         self._save_timer.setInterval(SAVE_DEBOUNCE_MS)
         self._save_timer.timeout.connect(self._save_now)
-        self.setWindowTitle("Baseus Presenter - Configurações (v2.0)")
+        self.setWindowTitle(tr('Baseus Presenter - Configurações (v2.0)'))
         self.setWindowIcon(QIcon.fromTheme("input-mouse"))
-        self.setMinimumWidth(550)
+        self.setMinimumWidth(680)
 
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
@@ -160,15 +163,15 @@ class MainWindow(QMainWindow):
 
         # --- A BARRA DE PERFIS VIP ---
         row_perfil = QHBoxLayout()
-        row_perfil.addWidget(QLabel("<b>Perfil:</b>"))
+        row_perfil.addWidget(QLabel(tr('<b>Perfil:</b>')))
 
         self.combo_profiles = QComboBox()
         self.combo_profiles.currentTextChanged.connect(self.change_profile)
 
-        btn_new_profile = QPushButton("Novo Perfil")
+        btn_new_profile = QPushButton(tr('Novo Perfil'))
         btn_new_profile.clicked.connect(self.new_profile)
 
-        btn_del_profile = QPushButton("Excluir")
+        btn_del_profile = QPushButton(tr('Excluir'))
         btn_del_profile.clicked.connect(self.delete_profile)
 
         row_perfil.addWidget(self.combo_profiles, stretch=1)
@@ -181,7 +184,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(line)
 
         # 🔋 O Visor de Bateria
-        self.lbl_battery = QPushButton(" Bateria: Aguardando...")
+        self.lbl_battery = QPushButton(tr(' Bateria: Aguardando...'))
         self.lbl_battery.setFlat(True)
         self.lbl_battery.setStyleSheet("""
             text-align: left;
@@ -202,10 +205,10 @@ class MainWindow(QMainWindow):
         self.laser_slider.valueChanged.connect(self.save_settings)
 
         box_cores = QHBoxLayout()
-        self.btn_laser_color = QPushButton("Cor do Laser")
+        self.btn_laser_color = QPushButton(tr('Cor do Laser'))
         self.btn_laser_color.clicked.connect(lambda: self.pick_color("laser_color", self.btn_laser_color))
 
-        self.btn_pincel_color = QPushButton("Cor do Pincel")
+        self.btn_pincel_color = QPushButton(tr('Cor do Pincel'))
         self.btn_pincel_color.clicked.connect(lambda: self.pick_color("pincel_color", self.btn_pincel_color))
         box_cores.addWidget(self.btn_laser_color); box_cores.addWidget(self.btn_pincel_color)
 
@@ -218,19 +221,19 @@ class MainWindow(QMainWindow):
         self.spotlight_opacity = QSlider(Qt.Horizontal); self.spotlight_opacity.setRange(50, 255)
         self.spotlight_opacity.valueChanged.connect(self.save_settings)
 
-        form_visual.addRow("Tamanho do Laser:", self.laser_slider)
-        form_visual.addRow("Cores:", box_cores)
-        form_visual.addRow("Tamanho da Lupa:", self.lupa_slider)
-        form_visual.addRow("Tamanho/Escuridão Spotlight:", self.spotlight_slider)
+        form_visual.addRow(tr('Tamanho do Laser:'), self.laser_slider)
+        form_visual.addRow(tr('Cores:'), box_cores)
+        form_visual.addRow(tr('Tamanho da Lupa:'), self.lupa_slider)
+        form_visual.addRow(tr('Tamanho/Escuridão Spotlight:'), self.spotlight_slider)
         form_visual.addRow("", self.spotlight_opacity)
-        tabs.addTab(tab_visual, "Visual e Ponteiro")
+        tabs.addTab(tab_visual, tr('Visual e Ponteiro'))
 
         # --- ABA 2: ÁUDIO & I.A. ---
         tab_ia = QWidget()
         form_ia = QFormLayout(tab_ia)
 
         self.combo_mic = QComboBox()
-        self.combo_mic.addItem("Padrão do Sistema (Automático)", None)
+        self.combo_mic.addItem(tr('Padrão do Sistema (Automático)'), None)
         try:
             for idx, dev in enumerate(sd.query_devices()):
                 if dev['max_input_channels'] > 0:
@@ -243,9 +246,12 @@ class MainWindow(QMainWindow):
         self.combo_models = QComboBox()
         self.combo_models.currentIndexChanged.connect(self.save_settings)
 
-        btn_add = QPushButton("Adicionar"); btn_add.clicked.connect(self.add_model)
-        btn_del = QPushButton("Remover"); btn_del.clicked.connect(self.delete_model)
+        btn_add = QPushButton(tr('Adicionar')); btn_add.clicked.connect(self.add_model)
+        btn_del = QPushButton(tr('Remover')); btn_del.clicked.connect(self.delete_model)
+        btn_language = QPushButton(tr('Idioma do modelo'))
+        btn_language.clicked.connect(lambda: self._ensure_model_language(force=True))
         box_modelos.addWidget(self.combo_models); box_modelos.addWidget(btn_add); box_modelos.addWidget(btn_del)
+        box_modelos.addWidget(btn_language)
         # Guarda o path selecionado para só emitir model_changed quando o
         # modelo REALMENTE mudar (evita reload do Vosk ao trocar outro campo
         # qualquer que também dispare save_settings indiretamente). Setado de
@@ -254,7 +260,7 @@ class MainWindow(QMainWindow):
 
         row_txt = QHBoxLayout()
         self.lbl_txt_path = QLabel(self.config.get("save_dir", os.path.expanduser("~")))
-        btn_txt = QPushButton("Alterar Destino")
+        btn_txt = QPushButton(tr('Alterar Destino'))
         btn_txt.clicked.connect(self.pick_txt_dir)
         row_txt.addWidget(self.lbl_txt_path); row_txt.addWidget(btn_txt)
 
@@ -262,43 +268,59 @@ class MainWindow(QMainWindow):
         self.populate_languages()
         self.combo_lang.currentIndexChanged.connect(self.check_and_download_lang)
 
-        form_ia.addRow("Microfone:", self.combo_mic)
-        form_ia.addRow("Modelo de Voz:", box_modelos)
-        form_ia.addRow("Salvar aulas (.txt) em:", row_txt)
-        form_ia.addRow("Traduzir para:", self.combo_lang)
-        tabs.addTab(tab_ia, "Áudio e I.A.")
+        form_ia.addRow(tr('Microfone:'), self.combo_mic)
+        form_ia.addRow(tr('Modelo de Voz:'), box_modelos)
+        form_ia.addRow(tr('Salvar aulas (.txt) em:'), row_txt)
+        form_ia.addRow(tr('Traduzir para:'), self.combo_lang)
+        tabs.addTab(tab_ia, tr('Áudio e I.A.'))
 
         # --- ABA 3: GERAL ---
         tab_geral = QWidget()
         form_geral = QFormLayout(tab_geral)
 
+        self.combo_ui_language = QComboBox()
+        for label, code in ((tr("Automático — idioma do sistema"), "auto"),
+                            ("Português", "pt"), ("English", "en")):
+            self.combo_ui_language.addItem(label, code)
+        selected = self.combo_ui_language.findData(self.config.get("ui_language", "auto"))
+        self.combo_ui_language.setCurrentIndex(max(0, selected))
+        self.combo_ui_language.currentIndexChanged.connect(self.save_ui_language)
+        form_geral.addRow(tr("Idioma da interface:"), self.combo_ui_language)
+        language_note = QLabel(tr("A mudança de idioma será aplicada ao reiniciar o aplicativo."))
+        language_note.setWordWrap(True)
+        form_geral.addRow(language_note)
+
         self.combo_close = QComboBox()
-        self.combo_close.addItems(["Minimizar para a Bandeja (Segundo Plano)", "Sair do Aplicativo completamente"])
+        self.combo_close.addItems([tr('Minimizar para a Bandeja (Segundo Plano)'), tr('Sair do Aplicativo completamente')])
         self.combo_close.currentIndexChanged.connect(self.save_settings)
 
-        self.check_legenda = QCheckBox("Exibir as legendas na tela ao usar o botão 'Gravar'")
+        self.check_legenda = QCheckBox(tr("Exibir legendas ao gravar"))
         self.check_legenda.toggled.connect(self.save_settings)
 
-        self.btn_check_update = QPushButton("Verificar Atualizações")
+        self.btn_check_update = QPushButton(tr('Verificar Atualizações'))
         self.btn_check_update.clicked.connect(self.manual_update_requested.emit)
 
-        self.btn_uninstall = QPushButton("Desinstalar Baseus Presenter…")
+        self.btn_uninstall = QPushButton(tr('Desinstalar Baseus Presenter…'))
         self.btn_uninstall.clicked.connect(self.request_uninstall)
         try:
             validate_installation(Path(__file__).resolve().parents[1])
         except (OSError, ValueError):
             self.btn_uninstall.setEnabled(False)
-            self.btn_uninstall.setToolTip("Disponível apenas na versão instalada, fora de um checkout Git.")
+            self.btn_uninstall.setToolTip(tr('Disponível apenas na versão instalada, fora de um checkout Git.'))
 
-        form_geral.addRow("Ao clicar no X da janela:", self.combo_close)
-        form_geral.addRow("Visual:", self.check_legenda)
-        form_geral.addRow("Software:", self.btn_check_update)
+        form_geral.addRow(tr('Ao clicar no X da janela:'), self.combo_close)
+        form_geral.addRow(tr('Visual:'), self.check_legenda)
+        form_geral.addRow(tr('Software:'), self.btn_check_update)
         form_geral.addRow("", self.btn_uninstall)
-        tabs.addTab(tab_geral, "Geral")
+        tabs.addTab(tab_geral, tr('Geral'))
 
         # Injeção inicial dos dados na tela
         self.populate_profiles_combo()
         self._load_profile_into_widgets()
+
+    def save_ui_language(self):
+        self.config.set("ui_language", self.combo_ui_language.currentData())
+        self._save_now()
 
     def update_battery(self, msg):
         match = re.search(r'(\d+)', msg)
@@ -325,12 +347,12 @@ class MainWindow(QMainWindow):
 
         self.lbl_battery.setIcon(QIcon(pixmap))
         self.lbl_battery.setIconSize(pixmap.size())
-        self.lbl_battery.setText(f" Bateria: {percent}%")
+        self.lbl_battery.setText(tr(' Bateria: {0}%', percent))
 
     # --- CONTROLES DE ATUALIZAÇÃO ---
     def set_update_checking_state(self, is_checking):
         self.btn_check_update.setEnabled(not is_checking)
-        self.btn_check_update.setText("Buscando no GitHub..." if is_checking else "Verificar Atualizações")
+        self.btn_check_update.setText(tr('Buscando no GitHub...') if is_checking else tr('Verificar Atualizações'))
 
     def prompt_update(self, version):
         entry = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "autostart/baseus-presenter.desktop"
@@ -344,23 +366,23 @@ class MainWindow(QMainWindow):
             except (OSError, ValueError, configparser.Error):
                 enabled = False
         box = QMessageBox(self)
-        box.setWindowTitle("Atualização Disponível")
-        box.setText(f"A versão {version} do Baseus Presenter foi lançada.\n\nDeseja fechar o aplicativo e atualizar agora?")
+        box.setWindowTitle(tr('Atualização Disponível'))
+        box.setText(tr('A versão {0} do Baseus Presenter foi lançada.\n\nDeseja fechar o aplicativo e atualizar agora?', version))
         box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        box.button(QMessageBox.Yes).setText("Atualizar")
-        box.button(QMessageBox.No).setText("Cancelar")
+        box.button(QMessageBox.Yes).setText(tr('Atualizar'))
+        box.button(QMessageBox.No).setText(tr('Cancelar'))
         box.setDefaultButton(QMessageBox.No)
-        checkbox = QCheckBox("Iniciar o Baseus Presenter automaticamente ao entrar no sistema", box)
+        checkbox = QCheckBox(tr('Iniciar o Baseus Presenter automaticamente ao entrar no sistema'), box)
         checkbox.setChecked(enabled)
         box.setCheckBox(checkbox)
         reply = box.exec_()
         return reply == QMessageBox.Yes, checkbox.isChecked()
 
     def show_up_to_date(self):
-        QMessageBox.information(self, "Atualização", "Você já está rodando a versão mais recente.")
+        QMessageBox.information(self, tr('Atualização'), tr('Você já está rodando a versão mais recente.'))
 
     def show_update_error(self, error):
-        QMessageBox.warning(self, "Erro de Conexão", f"Não foi possível consultar o GitHub:\n\n{error}")
+        QMessageBox.warning(self, tr('Erro de Conexão'), tr('Não foi possível consultar o GitHub:\n\n{0}', error))
 
     # ==========================================
     # LÓGICA DE PERFIS (A MÁGICA)
@@ -392,7 +414,7 @@ class MainWindow(QMainWindow):
         self.config_updated.emit()
 
     def new_profile(self):
-        nome, ok = QInputDialog.getText(self, "Novo Perfil", "Nome do novo perfil (ex: Aula IFMG):")
+        nome, ok = QInputDialog.getText(self, tr('Novo Perfil'), tr('Nome do novo perfil (ex: Aula IFMG):'))
         if not (ok and nome):
             return
 
@@ -406,7 +428,7 @@ class MainWindow(QMainWindow):
                 data["active_profile"] = nome
 
         if already_exists:
-            QMessageBox.warning(self, "Erro", "Já existe um perfil com esse nome.")
+            QMessageBox.warning(self, tr('Erro'), tr('Já existe um perfil com esse nome.'))
             return
 
         self._save_now()
@@ -419,10 +441,10 @@ class MainWindow(QMainWindow):
         current = self.config.get("active_profile")
 
         if len(self.config.get("profiles", {})) <= 1:
-            QMessageBox.warning(self, "Aviso", "Você não pode excluir o único perfil existente.")
+            QMessageBox.warning(self, tr('Aviso'), tr('Você não pode excluir o único perfil existente.'))
             return
 
-        reply = QMessageBox.question(self, "Excluir", f"Excluir o perfil '{current}'?", QMessageBox.Yes | QMessageBox.No)
+        reply = QMessageBox.question(self, tr('Excluir'), tr("Excluir o perfil '{0}'?", current), QMessageBox.Yes | QMessageBox.No)
         if reply != QMessageBox.Yes:
             return
 
@@ -476,7 +498,7 @@ class MainWindow(QMainWindow):
         idx_mod = self.combo_models.findData(p["audio"].get("selected_model_path", ""))
         if idx_mod < 0:
             saved_path = p["audio"].get("selected_model_path", "")
-            self.combo_models.addItem(saved_path or "Nenhum modelo selecionado", saved_path)
+            self.combo_models.addItem(saved_path or tr('Nenhum modelo selecionado'), saved_path)
             idx_mod = self.combo_models.count() - 1
         self.combo_models.setCurrentIndex(idx_mod)
 
@@ -494,6 +516,8 @@ class MainWindow(QMainWindow):
         # widget comparava contra o modelo do perfil anterior e emitia
         # model_changed de novo, à toa.
         self._last_model_path = p["audio"].get("selected_model_path", "")
+        self._refresh_translation_targets()
+        QTimer.singleShot(0, self._ensure_model_language)
 
     def save_settings(self):
         if self._loading_widgets:
@@ -533,6 +557,8 @@ class MainWindow(QMainWindow):
         # idioma...), não só pelo combo de modelo. Sem essa checagem, trocar o
         # tamanho do laser também dispararia um reload desnecessário do Vosk.
         if model_path_changed:
+            self._ensure_model_language()
+            self._refresh_translation_targets()
             self.model_changed.emit()
 
     def _save_now(self):
@@ -608,7 +634,7 @@ class MainWindow(QMainWindow):
 
     def pick_color(self, config_key, btn):
         cor_atual = QColor(self.config.get_visual(config_key, "#FF0000"))
-        cor_escolhida = QColorDialog.getColor(cor_atual, self, "Escolha a cor")
+        cor_escolhida = QColorDialog.getColor(cor_atual, self, tr('Escolha a cor'))
         if cor_escolhida.isValid():
             self.config.set_visual(config_key, cor_escolhida.name())
             self.set_btn_color(btn, cor_escolhida.name())
@@ -630,19 +656,24 @@ class MainWindow(QMainWindow):
             models = self.config.get("models", [])
         self.combo_models.clear()
         if not models:
-            self.combo_models.addItem("Nenhum modelo configurado")
+            self.combo_models.addItem(tr('Nenhum modelo configurado'))
         else:
             for m in models:
-                self.combo_models.addItem(m.get("label", "Modelo"), m.get("path"))
+                self.combo_models.addItem(m.get("label", tr('Modelo')), m.get("path"))
 
     def add_model(self):
-        diretorio = QFileDialog.getExistingDirectory(self, "Selecione a pasta do Vosk")
+        diretorio = QFileDialog.getExistingDirectory(self, tr('Selecione a pasta do Vosk'))
         if diretorio:
-            nome, ok = QInputDialog.getText(self, "Nome", "Dê um nome (ex: Vosk PT-BR):")
+            nome, ok = QInputDialog.getText(self, tr('Nome'), tr('Dê um nome (ex: Vosk PT-BR):'))
             if ok and nome:
+                language = self._ask_model_language(nome)
+                if not language:
+                    return
                 with self.config.mutate() as data:
                     models = data.setdefault("models", [])
-                    models.append({"label": nome, "path": diretorio})
+                    # A mesma pasta representa o mesmo modelo em todos os perfis.
+                    models[:] = [m for m in models if m.get("path") != diretorio]
+                    models.append({"label": nome, "path": diretorio, "language": language})
                     active = data["active_profile"]
                     data["profiles"][active]["audio"]["selected_model_path"] = diretorio
 
@@ -650,6 +681,62 @@ class MainWindow(QMainWindow):
                 self._load_profile_into_widgets()
                 self.model_changed.emit()
                 self.config_updated.emit()
+
+    def _ask_model_language(self, label, current=None):
+        languages = {}
+        for locale in QLocale.matchingLocales(QLocale.AnyLanguage, QLocale.AnyScript, QLocale.AnyCountry):
+            code = locale.name().split('_')[0]
+            if code != 'C':
+                name = QLocale.languageToString(locale.language())
+                languages.setdefault(code, f'{name} / {locale.nativeLanguageName()} ({code})')
+        items = [tr('Selecione o idioma do modelo')] + sorted(languages.values(), key=str.casefold)
+        current_item = languages.get(current)
+        index = items.index(current_item) if current_item in items else 0
+        value, ok = QInputDialog.getItem(
+            self, tr('Idioma do modelo'),
+            tr('Idioma falado no modelo "{0}":', label), items, index, False)
+        if not ok:
+            return None
+        match = re.search(r'\(([a-z]{2,3})\)$', value)
+        return match.group(1) if match else None
+
+    def _ensure_model_language(self, force=False):
+        if getattr(self, '_model_language_prompt_open', False):
+            return
+        path = self.config.get_audio('selected_model_path')
+        if not path:
+            return
+        model = next((m for m in self.config.get('models', []) if m.get('path') == path), {})
+        if model.get('language') and not force:
+            return
+        self._model_language_prompt_open = True
+        try:
+            language = self._ask_model_language(model.get('label', path), model.get('language'))
+        finally:
+            self._model_language_prompt_open = False
+        if language:
+            with self.config.mutate() as data:
+                models = data.setdefault('models', [])
+                entry = next((m for m in models if m.get('path') == path), None)
+                if entry is None:
+                    entry = {'path': path, 'label': path}
+                    models.append(entry)
+                entry['language'] = language
+            self._save_now()
+            self.config_updated.emit()
+        self._refresh_translation_targets()
+
+    def _refresh_translation_targets(self):
+        source = self.config.get_audio('source_lang')
+        pairs = self._language_pairs or []
+        idiomas = sorted({(name, code) for origin, name, code in pairs
+                          if origin == source and code != source})
+        self._on_languages_loaded(idiomas)
+        self.combo_lang.setEnabled(bool(source and idiomas))
+
+    def _on_language_catalog_loaded(self, pairs):
+        self._language_pairs = pairs
+        self._refresh_translation_targets()
 
     def delete_model(self):
         path = self.combo_models.currentData()
@@ -666,7 +753,7 @@ class MainWindow(QMainWindow):
         if not model:
             return
 
-        reply = QMessageBox.question(self, "Remover Modelo", f"Remover '{model_label}'?", QMessageBox.Yes | QMessageBox.No)
+        reply = QMessageBox.question(self, tr('Remover Modelo'), tr("Remover '{0}'?", model_label), QMessageBox.Yes | QMessageBox.No)
         if reply != QMessageBox.Yes:
             return
 
@@ -683,7 +770,7 @@ class MainWindow(QMainWindow):
         self.config_updated.emit()
 
     def pick_txt_dir(self):
-        diretorio = QFileDialog.getExistingDirectory(self, "Onde salvar os relatórios (.txt)")
+        diretorio = QFileDialog.getExistingDirectory(self, tr('Onde salvar os relatórios (.txt)'))
         if diretorio:
             self.config.set("save_dir", diretorio)
             self.lbl_txt_path.setText(diretorio)
@@ -699,15 +786,15 @@ class MainWindow(QMainWindow):
         self.combo_lang.clear()
 
         if not ARGOS_GUI_AVAILABLE:
-            self.combo_lang.addItem("Inglês (Argos não detectado)", "en")
+            self.combo_lang.addItem(tr('Inglês (Argos não detectado)'), "en")
             self.combo_lang.blockSignals(False)
             return
 
-        self.combo_lang.addItem("Carregando idiomas...", None)
+        self.combo_lang.addItem(tr('Carregando idiomas...'), None)
         self.combo_lang.blockSignals(False)
 
         self._lang_loader = LanguageLoadThread(self)
-        self._lang_loader.loaded.connect(self._on_languages_loaded)
+        self._lang_loader.loaded.connect(self._on_language_catalog_loaded)
         self._lang_loader.failed.connect(self._on_languages_failed)
         self._lang_loader.start()
 
@@ -719,21 +806,23 @@ class MainWindow(QMainWindow):
                 # Tela mostra "English", mas o Python guarda "en"
                 self.combo_lang.addItem(nome, codigo)
         else:
-            self.combo_lang.addItem("Inglês (nenhum pacote encontrado)", "en")
+            self.combo_lang.addItem(tr('Nenhuma tradução disponível para este modelo'), None)
 
         # Reaplica o idioma salvo no perfil, agora que a lista existe.
         salvo = self.config.get_audio("target_lang", "en")
         idx = self.combo_lang.findData(salvo)
         if idx < 0:
-            self.combo_lang.addItem(salvo, salvo)
+            self.combo_lang.addItem(tr('{0} (indisponível)', salvo), salvo)
             idx = self.combo_lang.count() - 1
+            self.combo_lang.model().item(idx).setEnabled(False)
         self.combo_lang.setCurrentIndex(idx)
         self.combo_lang.blockSignals(False)
 
     def _on_languages_failed(self, msg):
         # O fallback mantém o idioma do perfil; salvar outro campo não deve
         # transformar uma falha de rede em mudança permanente de idioma.
-        self._on_languages_loaded([])
+        self._language_pairs = None
+        self._refresh_translation_targets()
         log.warning(f"Lista de idiomas indisponível: {msg}")
 
     def check_and_download_lang(self, index):
@@ -743,13 +832,17 @@ class MainWindow(QMainWindow):
         # Extrai o "en" ou "es" que escondemos no item
         target_lang = self.combo_lang.itemData(index)
         if not target_lang: return
+        source = self.config.get_audio('source_lang')
+        if not source or not any(origin == source and code == target_lang
+                                 for origin, _, code in (self._language_pairs or [])):
+            return
 
         # Um download já em andamento não deve ser atropelado: a thread antiga
         # continuaria rodando e escreveria no diálogo de progresso novo.
         if getattr(self, "installer", None) is not None and self.installer.isRunning():
             QMessageBox.information(
-                self, "Aguarde",
-                "Já existe um download de idioma em andamento. Aguarde a conclusão."
+                self, tr('Aguarde'),
+                tr('Já existe um download de idioma em andamento. Aguarde a conclusão.')
             )
             return
 
@@ -765,9 +858,9 @@ class MainWindow(QMainWindow):
             return
 
         nome_idioma = self.combo_lang.itemText(index)
-        reply = QMessageBox.question(self, "Baixar Idioma", f"O idioma '{nome_idioma}' não está instalado.\nDeseja baixar? (Aprox. 30MB)", QMessageBox.Yes | QMessageBox.No)
+        reply = QMessageBox.question(self, tr('Baixar Idioma'), tr("O idioma '{0}' não está instalado.\nDeseja baixar? (Aprox. 30MB)", nome_idioma), QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
-            self.progress = QProgressDialog("Baixando pacote... Aguarde.", None, 0, 0, self)
+            self.progress = QProgressDialog(tr('Baixando pacote... Aguarde.'), None, 0, 0, self)
             self.progress.setWindowTitle("Argos")
             self.progress.setModal(True); self.progress.show()
             if self.installer is not None:
@@ -783,8 +876,8 @@ class MainWindow(QMainWindow):
         if progress is not None:
             progress.close()
             self.progress = None
-        if success: QMessageBox.information(self, "Sucesso", "Idioma instalado!")
-        else: QMessageBox.warning(self, "Erro", f"Falha no download:\n{msg}")
+        if success: QMessageBox.information(self, tr('Sucesso'), tr('Idioma instalado!'))
+        else: QMessageBox.warning(self, tr('Erro'), tr('Falha no download:\n{0}', msg))
 
     def show_warning(self, msg):
         """Slot para avisos de permissão/hardware vindos das threads."""
@@ -823,17 +916,17 @@ class MainWindow(QMainWindow):
             register_desktop(target)
             terminal = shutil.which("xterm") or shutil.which("x-terminal-emulator")
             if not terminal:
-                raise RuntimeError("Nenhum terminal encontrado. Use o atalho Desinstalar Baseus Presenter no menu de aplicativos.")
+                raise RuntimeError(tr('Nenhum terminal encontrado. Use o atalho Desinstalar Baseus Presenter no menu de aplicativos.'))
             result = QProcess.startDetached(
                 terminal, ["-e", "/bin/bash", str(target / "uninstall.sh")], str(target.parent))
             started = result[0] if isinstance(result, tuple) else result
             if not started:
-                raise RuntimeError("Não foi possível abrir o terminal de desinstalação.")
+                raise RuntimeError(tr('Não foi possível abrir o terminal de desinstalação.'))
             if isinstance(result, tuple) and result[1] > 0:
                 pid = result[1]
                 self._uninstall_pending = True
                 self.btn_uninstall.setEnabled(False)
-                self.btn_uninstall.setText("Desinstalação aberta…")
+                self.btn_uninstall.setText(tr('Desinstalação aberta…'))
                 timer = QTimer(self)
                 self._uninstall_timer = timer
 
@@ -845,14 +938,14 @@ class MainWindow(QMainWindow):
                         timer.deleteLater()
                         self._uninstall_pending = False
                         self.btn_uninstall.setEnabled(True)
-                        self.btn_uninstall.setText("Desinstalar Baseus Presenter…")
+                        self.btn_uninstall.setText(tr('Desinstalar Baseus Presenter…'))
                     except PermissionError:
                         pass
 
                 timer.timeout.connect(check_terminal)
                 timer.start(500)
         except (OSError, ValueError, RuntimeError) as error:
-            QMessageBox.warning(self, "Desinstalação", str(error))
+            QMessageBox.warning(self, tr('Desinstalação'), str(error))
 
     def closeEvent(self, event):
         self.flush_pending_save()
@@ -871,12 +964,12 @@ class TrayIcon(QSystemTrayIcon):
         if not QSystemTrayIcon.isSystemTrayAvailable():
             log.warning("Bandeja do sistema indisponível. No Zorin/GNOME, pode ser necessário instalar a extensão 'AppIndicator Support'.")
         menu = QMenu()
-        self.battery_action = menu.addAction("🔋 Bateria: Aguardando passador...")
+        self.battery_action = menu.addAction(tr('🔋 Bateria: Aguardando passador...'))
         self.battery_action.setEnabled(False)
         menu.addSeparator()
 
-        menu.addAction("Configurações").triggered.connect(self.main_window.showNormal)
-        menu.addAction("Sair").triggered.connect(qApp.quit)
+        menu.addAction(tr('Configurações')).triggered.connect(self.main_window.showNormal)
+        menu.addAction(tr('Sair')).triggered.connect(qApp.quit)
         self.setContextMenu(menu)
         self.show()
 

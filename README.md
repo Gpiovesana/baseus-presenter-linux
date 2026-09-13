@@ -11,7 +11,7 @@
 
 # 🇧🇷 Português
 
-> ❗ A interface atual está disponível apenas em português. A localização automática da interface está planejada para uma versão futura.
+> A interface está disponível em português e inglês, com detecção automática do idioma do sistema e funcionamento offline.
 
 
 # Baseus Presenter para Linux 🚀
@@ -98,6 +98,17 @@ Se necessário, execute `bash ~/BaseusPresenter/uninstall.sh` (ajuste o caminho
 se instalou em outra pasta). O mesmo aviso de confirmação será exibido.
 
 ## ⚙️ Como usar
+
+Em **Configurações → Geral → Idioma da interface**, escolha **Automático — idioma
+do sistema**, **Português** ou **English**. A escolha fica salva e é aplicada
+depois de encerrar e abrir o aplicativo novamente. Em modo automático, português
+e inglês são reconhecidos; outros idiomas usam inglês como alternativa.
+Essa opção não altera os idiomas de reconhecimento de voz ou das legendas.
+
+As traduções acompanham o aplicativo: não é necessário baixar modelos ou acessar
+a internet para traduzir a interface. O instalador usa o idioma do sistema;
+o desinstalador também respeita a escolha salva no aplicativo.
+
 * Inicie o programa: Você pode iniciá-lo pelo terminal rodando `~/BaseusPresenter/.venv/bin/python3 ~/BaseusPresenter/baseus_app.py`.
 
 * Ícone na Bandeja: Um ícone vermelho aparecerá perto do relógio do sistema. Clique com o botão direito para abrir as Configurações.
@@ -143,7 +154,7 @@ Sugestões, issues e pull requests são muito bem-vindos! Sinta-se à vontade pa
 
 # 🇺🇸 English
 
-> ❗ The application interface is currently available in Portuguese. Automatic interface localization is planned for a future release.
+> The interface is available in Portuguese and English, with automatic system language detection and offline operation.
 # Baseus Presenter for Linux 🚀
 
 An unofficial open-source software that unlocks and expands all features of the Baseus Orange Dot AI slide presenter on Linux. Built with PyQt5, this project transforms your presenter into a complete tool for teachers, speakers, and content creators, bringing visual tools, offline voice transcription, and real-time simultaneous translation.
@@ -222,7 +233,7 @@ choice becomes available for subsequent updates.
 
 Open **Configurações → Geral → Desinstalar Baseus Presenter…** (Settings → General
 → Uninstall Baseus Presenter), or search for **Desinstalar Baseus Presenter** in
-your applications menu. The interface labels are currently in Portuguese.
+your applications menu. Interface labels follow the selected language.
 The terminal first displays a warning: you must type `DESINSTALAR` to continue.
 Pressing Enter or closing the terminal cancels. Your administrator password is
 requested only to remove the USB permission rule. Confirmation is case-insensitive.
@@ -241,6 +252,17 @@ If needed, run `bash ~/BaseusPresenter/uninstall.sh` (adjust the path if you
 installed it elsewhere). The same confirmation warning will appear.
 
 ## ⚙️ How to use
+
+In **Settings → General → Interface language**, choose **Automatic — system
+language**, **Português**, or **English**. The preference is saved and takes effect
+after quitting and reopening the application. Automatic mode recognizes Portuguese
+and English and falls back to English for unsupported languages. This setting does
+not change speech recognition or subtitle languages.
+
+Translations are bundled with the application; no models or internet access are
+needed for the interface. The installer follows the system language, and the
+uninstaller also honors the preference saved in the application.
+
 * Start the program: You can start it via terminal by running ~/BaseusPresenter/.venv/bin/python3 ~/BaseusPresenter/baseus_app.py.
 
 * System Tray Icon: A red icon will appear near the system clock. Right-click it to open Settings.

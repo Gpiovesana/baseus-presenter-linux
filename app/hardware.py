@@ -1,3 +1,4 @@
+from .i18n import tr
 # ~/Documentos/Projetos/baseus-presenter-linux/app/hardware.py
 import os
 import re
@@ -179,7 +180,7 @@ class HardwareReader(QThread):
                 "(veja o README / install.sh) ou rode como root."
             )
             self.permission_error.emit(
-                "⚠️ Sem permissão para ler o passador! Verifique as regras udev."
+                tr('⚠️ Sem permissão para ler o passador! Verifique as regras udev.')
             )
 
     def _scan_evdev(self):
@@ -267,7 +268,7 @@ class HardwareReader(QThread):
                 "Verifique as regras udev e reconecte o passador."
             )
             self.permission_error.emit(
-                "⚠️ Sem permissão no giroscópio! Verifique as regras udev."
+                tr('⚠️ Sem permissão no giroscópio! Verifique as regras udev.')
             )
         except Exception as exc:
             log.exception(f"Erro no giroscópio: {exc}")
@@ -396,7 +397,7 @@ class HardwareReader(QThread):
                 
                 try:
                     if data[0] == 0x0A:
-                        self.battery_update.emit(f"🔋 Bateria: {data[3]}%")
+                        self.battery_update.emit(tr('🔋 Bateria: {0}%', data[3]))
                         comando = data[5]
                         
                         if comando in [0x71, 0x72, 0x73]:

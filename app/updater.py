@@ -1,3 +1,4 @@
+from .i18n import tr, current_language
 import json
 import os
 import re
@@ -174,9 +175,8 @@ def start_update_process(version_tag, autostart=None):
     if any((path / ".git").is_file() or (path / ".git/HEAD").is_file()
            or (path / ".git").is_symlink() for path in (root, *root.parents)):
         QMessageBox.warning(
-            None, "Atualização indisponível",
-            "Esta cópia está em um checkout de desenvolvimento. "
-            "Atualize pelo Git ou use uma instalação separada do aplicativo.",
+            None, tr('Atualização indisponível'),
+            tr('Esta cópia está em um checkout de desenvolvimento. Atualize pelo Git ou use uma instalação separada do aplicativo.'),
         )
         return False
     updater_script = os.path.join(base_dir, "updater.sh")
@@ -189,7 +189,7 @@ def start_update_process(version_tag, autostart=None):
     version = tag.removeprefix("v")
     if not re.fullmatch(r"v?\d+(?:\.\d+){0,2}", tag):
         log.error(f"Versão de atualização inválida: {version_tag!r}")
-        QMessageBox.warning(None, "Erro de Atualização", "A versão informada pela atualização é inválida.")
+        QMessageBox.warning(None, tr('Erro de Atualização'), tr('A versão informada pela atualização é inválida.'))
         return False
 
     app = QApplication.instance()
@@ -220,6 +220,7 @@ def start_update_process(version_tag, autostart=None):
             stdout=log_stream,
             stderr=subprocess.STDOUT,
             start_new_session=True,
+            env=dict(os.environ, BASEUS_UI_LANGUAGE=current_language()),
         )
     except OSError as exc:
         log_stream.close()
@@ -229,7 +230,7 @@ def start_update_process(version_tag, autostart=None):
             except OSError:
                 pass
         log.error(f"Falha ao iniciar updater.sh: {exc}")
-        QMessageBox.warning(None, "Erro de Atualização", f"Não foi possível iniciar o atualizador:\n\n{exc}")
+        QMessageBox.warning(None, tr('Erro de Atualização'), tr('Não foi possível iniciar o atualizador:\n\n{0}', exc))
         return False
     finally:
         log_stream.close()
@@ -242,8 +243,8 @@ def start_update_process(version_tag, autostart=None):
     app._baseus_update_timer = timer
     app._baseus_update_status_file = status_file
     app._baseus_update_log_file = log_file
-    progress = QProgressDialog("Preparando atualização… Aguarde.", None, 0, 0)
-    progress.setWindowTitle("Atualizando Baseus Presenter")
+    progress = QProgressDialog(tr('Preparando atualização… Aguarde.'), None, 0, 0)
+    progress.setWindowTitle(tr('Atualizando Baseus Presenter'))
     progress.setWindowModality(Qt.ApplicationModal)
     progress.setWindowFlags(progress.windowFlags() & ~Qt.WindowCloseButtonHint)
     progress.setCancelButton(None)
@@ -259,7 +260,7 @@ def start_update_process(version_tag, autostart=None):
                 lines = stream.read().decode("utf-8", errors="replace").splitlines()
             stages = [line for line in lines if line.startswith(("🔄", "📥", "📦", "🐍", "⏳"))]
             if stages:
-                progress.setLabelText(stages[-1] + "\n\nAguarde. O aplicativo será reiniciado ao concluir.")
+                progress.setLabelText(tr(stages[-1]) + tr('\n\nAguarde. O aplicativo será reiniciado ao concluir.'))
         except OSError:
             pass
         try:
@@ -290,12 +291,12 @@ def start_update_process(version_tag, autostart=None):
                 details = stream.read().strip()
         except OSError:
             details = ""
-        details = details[-2000:] if details else f"O atualizador terminou com código {return_code}."
+        details = details[-2000:] if details else tr('O atualizador terminou com código {0}.', return_code)
         log.error(f"Falha ao preparar atualização: {details}")
         QMessageBox.warning(
             None,
-            "Erro de Atualização",
-            "Não foi possível preparar a atualização. O aplicativo continuará aberto.\n\n" + details,
+            tr('Erro de Atualização'),
+            tr('Não foi possível preparar a atualização. O aplicativo continuará aberto.\n\n') + details,
         )
         for path in (status_file, log_file):
             try:

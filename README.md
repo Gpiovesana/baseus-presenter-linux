@@ -109,9 +109,9 @@ As traduções acompanham o aplicativo: não é necessário baixar modelos ou ac
 a internet para traduzir a interface. O instalador usa o idioma do sistema;
 o desinstalador também respeita a escolha salva no aplicativo.
 
-* Inicie o programa: Você pode iniciá-lo pelo terminal rodando `~/BaseusPresenter/.venv/bin/python3 ~/BaseusPresenter/baseus_app.py`.
+* Inicie o programa: Você pode iniciá-lo pelo terminal rodando `~/BaseusPresenter/.venv/bin/python3 ~/BaseusPresenter/baseus_app.py`, ou pelo menu de aplicativos do sistema.
 
-* Ícone na Bandeja: Um ícone vermelho aparecerá perto do relógio do sistema. Clique com o botão direito para abrir as Configurações.
+* Ícone na Bandeja: Um ícone aparecerá perto do relógio do sistema. Clique com o botão direito para abrir as Configurações.
 
 * Configurando a Voz (Vosk):
 
@@ -263,9 +263,9 @@ Translations are bundled with the application; no models or internet access are
 needed for the interface. The installer follows the system language, and the
 uninstaller also honors the preference saved in the application.
 
-* Start the program: You can start it via terminal by running ~/BaseusPresenter/.venv/bin/python3 ~/BaseusPresenter/baseus_app.py.
+* Start the program: You can start it via terminal by running ~/BaseusPresenter/.venv/bin/python3 ~/BaseusPresenter/baseus_app.py or searching in your app menu.
 
-* System Tray Icon: A red icon will appear near the system clock. Right-click it to open Settings.
+* System Tray Icon: An icon will appear near the system clock. Right-click it to open Settings.
 
 * Setting up Voice (Vosk):
 

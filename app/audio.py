@@ -597,19 +597,18 @@ class AudioThread(QThread):
                 self.msleep(10)
 
     def _resolve_source_lang(self):
-        """
-        #24: idioma de ORIGEM configurável. Antes era fixo em "pt" na
-        chamada ao Argos — um modelo Vosk em inglês, por exemplo, tinha seu
-        texto reconhecido enviado para tradução como se fosse português,
-        produzindo traduções sem sentido. Lido do perfil ativo (chave
-        "source_lang"), com fallback para "pt" por retrocompatibilidade.
-        """
+        """Config resolve a origem pelos metadados do modelo Vosk selecionado."""
         return self.config.get_audio("source_lang", "pt")
 
     def _translate_if_needed(self, text):
         if self.is_translating and ARGOS_AVAILABLE and text:
             source_lang = self._resolve_source_lang()
             target_lang = self.config.get_audio("target_lang", "en")
+            if not source_lang:
+                self.audio_warning.emit(tr('Defina o idioma do modelo Vosk antes de traduzir.'))
+                return text
+            if source_lang == target_lang:
+                return text
             try:
                 return argostranslate.translate.translate(text, source_lang, target_lang)
             except Exception as e:

@@ -35,8 +35,8 @@ class TestSaveDebounce(GuiTestCase):
 
     def test_combos_emitem_sinais_imediatos_e_compartilham_debounce(self):
         data = copy.deepcopy(cfg.DEFAULT_CONFIG)
-        data["models"] = [{"label": "M1", "path": "/tmp/m1"},
-                          {"label": "M2", "path": "/tmp/m2"}]
+        data["models"] = [{"label": "M1", "path": "/tmp/m1", "language": "pt"},
+                          {"label": "M2", "path": "/tmp/m2", "language": "de"}]
         data["profiles"]["Padrão"]["audio"]["selected_model_path"] = "/tmp/m1"
         win = self.make_window(data)
         win.combo_mic.addItem("Microfone USB", (7, "Microfone USB"))

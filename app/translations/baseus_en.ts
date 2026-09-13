@@ -636,5 +636,29 @@ Download it? (About 30 MB)</translation>
       <source>🔋 Bateria: {0}%</source>
       <translation>🔋 Battery: {0}%</translation>
     </message>
+    <message>
+      <source>Defina o idioma do modelo Vosk antes de traduzir.</source>
+      <translation>Set the Vosk model language before translating.</translation>
+    </message>
+    <message>
+      <source>Idioma do modelo</source>
+      <translation>Model language</translation>
+    </message>
+    <message>
+      <source>Idioma falado no modelo "{0}":</source>
+      <translation>Spoken language of model "{0}":</translation>
+    </message>
+    <message>
+      <source>Nenhuma tradução disponível para este modelo</source>
+      <translation>No translation available for this model</translation>
+    </message>
+    <message>
+      <source>Selecione o idioma do modelo</source>
+      <translation>Select the model language</translation>
+    </message>
+    <message>
+      <source>{0} (indisponível)</source>
+      <translation>{0} (unavailable)</translation>
+    </message>
   </context>
 </TS>

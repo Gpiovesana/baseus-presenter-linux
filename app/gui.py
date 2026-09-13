@@ -11,7 +11,7 @@ from pathlib import Path
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QSlider, QComboBox, QPushButton, QSystemTrayIcon, QMenu,
                              qApp, QTabWidget, QColorDialog, QFileDialog, QFormLayout, QInputDialog, QMessageBox, QCheckBox, QProgressDialog, QStyle)
-from PyQt5.QtCore import Qt, pyqtSignal, QThread, QTimer, QProcess
+from PyQt5.QtCore import Qt, pyqtSignal, QThread, QTimer, QProcess, QLocale
 from PyQt5.QtGui import QColor, QIcon, QPixmap, QPainter, QPen
 import sounddevice as sd
 
@@ -75,7 +75,7 @@ class LanguageLoadThread(QThread):
     get_available_packages() faz I/O de rede/disco, a janela congelava até o
     timeout quando não havia internet — sem qualquer feedback ao usuário.
     """
-    loaded = pyqtSignal(list)   # [(nome_exibido, codigo), ...]
+    loaded = pyqtSignal(list)   # [(origem, nome_destino, codigo_destino), ...]
     failed = pyqtSignal(str)
 
     def run(self):
@@ -84,8 +84,9 @@ class LanguageLoadThread(QThread):
             # sempre numa conexão lenta/travada, sobrevivendo ao
             # encerramento do app.
             with socket_timeout(ARGOS_INDEX_TIMEOUT_S):
+                argostranslate.package.update_package_index()
                 pacotes = argostranslate.package.get_available_packages()
-            idiomas = [(p.to_name, p.to_code) for p in pacotes if p.from_code == "pt"]
+            idiomas = [(p.from_code, p.to_name, p.to_code) for p in pacotes]
             self.loaded.emit(idiomas)
         except Exception as e:
             log.exception(f"Erro ao carregar idiomas do Argos: {e}")
@@ -144,6 +145,7 @@ class MainWindow(QMainWindow):
         self._last_input_device = _UNSET
         self.installer = None
         self._lang_loader = None
+        self._language_pairs = None
         # Mesmo padrão de overlay.py/audio.py: aceita tanto o dict cru quanto
         # o wrapper já embrulhado, para não depender de quem instancia primeiro.
         self.config = config if isinstance(config, Config) else Config(config)
@@ -246,7 +248,10 @@ class MainWindow(QMainWindow):
 
         btn_add = QPushButton(tr('Adicionar')); btn_add.clicked.connect(self.add_model)
         btn_del = QPushButton(tr('Remover')); btn_del.clicked.connect(self.delete_model)
+        btn_language = QPushButton(tr('Idioma do modelo'))
+        btn_language.clicked.connect(lambda: self._ensure_model_language(force=True))
         box_modelos.addWidget(self.combo_models); box_modelos.addWidget(btn_add); box_modelos.addWidget(btn_del)
+        box_modelos.addWidget(btn_language)
         # Guarda o path selecionado para só emitir model_changed quando o
         # modelo REALMENTE mudar (evita reload do Vosk ao trocar outro campo
         # qualquer que também dispare save_settings indiretamente). Setado de
@@ -511,6 +516,8 @@ class MainWindow(QMainWindow):
         # widget comparava contra o modelo do perfil anterior e emitia
         # model_changed de novo, à toa.
         self._last_model_path = p["audio"].get("selected_model_path", "")
+        self._refresh_translation_targets()
+        QTimer.singleShot(0, self._ensure_model_language)
 
     def save_settings(self):
         if self._loading_widgets:
@@ -550,6 +557,8 @@ class MainWindow(QMainWindow):
         # idioma...), não só pelo combo de modelo. Sem essa checagem, trocar o
         # tamanho do laser também dispararia um reload desnecessário do Vosk.
         if model_path_changed:
+            self._ensure_model_language()
+            self._refresh_translation_targets()
             self.model_changed.emit()
 
     def _save_now(self):
@@ -657,9 +666,14 @@ class MainWindow(QMainWindow):
         if diretorio:
             nome, ok = QInputDialog.getText(self, tr('Nome'), tr('Dê um nome (ex: Vosk PT-BR):'))
             if ok and nome:
+                language = self._ask_model_language(nome)
+                if not language:
+                    return
                 with self.config.mutate() as data:
                     models = data.setdefault("models", [])
-                    models.append({"label": nome, "path": diretorio})
+                    # A mesma pasta representa o mesmo modelo em todos os perfis.
+                    models[:] = [m for m in models if m.get("path") != diretorio]
+                    models.append({"label": nome, "path": diretorio, "language": language})
                     active = data["active_profile"]
                     data["profiles"][active]["audio"]["selected_model_path"] = diretorio
 
@@ -667,6 +681,62 @@ class MainWindow(QMainWindow):
                 self._load_profile_into_widgets()
                 self.model_changed.emit()
                 self.config_updated.emit()
+
+    def _ask_model_language(self, label, current=None):
+        languages = {}
+        for locale in QLocale.matchingLocales(QLocale.AnyLanguage, QLocale.AnyScript, QLocale.AnyCountry):
+            code = locale.name().split('_')[0]
+            if code != 'C':
+                name = QLocale.languageToString(locale.language())
+                languages.setdefault(code, f'{name} / {locale.nativeLanguageName()} ({code})')
+        items = [tr('Selecione o idioma do modelo')] + sorted(languages.values(), key=str.casefold)
+        current_item = languages.get(current)
+        index = items.index(current_item) if current_item in items else 0
+        value, ok = QInputDialog.getItem(
+            self, tr('Idioma do modelo'),
+            tr('Idioma falado no modelo "{0}":', label), items, index, False)
+        if not ok:
+            return None
+        match = re.search(r'\(([a-z]{2,3})\)$', value)
+        return match.group(1) if match else None
+
+    def _ensure_model_language(self, force=False):
+        if getattr(self, '_model_language_prompt_open', False):
+            return
+        path = self.config.get_audio('selected_model_path')
+        if not path:
+            return
+        model = next((m for m in self.config.get('models', []) if m.get('path') == path), {})
+        if model.get('language') and not force:
+            return
+        self._model_language_prompt_open = True
+        try:
+            language = self._ask_model_language(model.get('label', path), model.get('language'))
+        finally:
+            self._model_language_prompt_open = False
+        if language:
+            with self.config.mutate() as data:
+                models = data.setdefault('models', [])
+                entry = next((m for m in models if m.get('path') == path), None)
+                if entry is None:
+                    entry = {'path': path, 'label': path}
+                    models.append(entry)
+                entry['language'] = language
+            self._save_now()
+            self.config_updated.emit()
+        self._refresh_translation_targets()
+
+    def _refresh_translation_targets(self):
+        source = self.config.get_audio('source_lang')
+        pairs = self._language_pairs or []
+        idiomas = sorted({(name, code) for origin, name, code in pairs
+                          if origin == source and code != source})
+        self._on_languages_loaded(idiomas)
+        self.combo_lang.setEnabled(bool(source and idiomas))
+
+    def _on_language_catalog_loaded(self, pairs):
+        self._language_pairs = pairs
+        self._refresh_translation_targets()
 
     def delete_model(self):
         path = self.combo_models.currentData()
@@ -724,7 +794,7 @@ class MainWindow(QMainWindow):
         self.combo_lang.blockSignals(False)
 
         self._lang_loader = LanguageLoadThread(self)
-        self._lang_loader.loaded.connect(self._on_languages_loaded)
+        self._lang_loader.loaded.connect(self._on_language_catalog_loaded)
         self._lang_loader.failed.connect(self._on_languages_failed)
         self._lang_loader.start()
 
@@ -736,21 +806,23 @@ class MainWindow(QMainWindow):
                 # Tela mostra "English", mas o Python guarda "en"
                 self.combo_lang.addItem(nome, codigo)
         else:
-            self.combo_lang.addItem(tr('Inglês (nenhum pacote encontrado)'), "en")
+            self.combo_lang.addItem(tr('Nenhuma tradução disponível para este modelo'), None)
 
         # Reaplica o idioma salvo no perfil, agora que a lista existe.
         salvo = self.config.get_audio("target_lang", "en")
         idx = self.combo_lang.findData(salvo)
         if idx < 0:
-            self.combo_lang.addItem(salvo, salvo)
+            self.combo_lang.addItem(tr('{0} (indisponível)', salvo), salvo)
             idx = self.combo_lang.count() - 1
+            self.combo_lang.model().item(idx).setEnabled(False)
         self.combo_lang.setCurrentIndex(idx)
         self.combo_lang.blockSignals(False)
 
     def _on_languages_failed(self, msg):
         # O fallback mantém o idioma do perfil; salvar outro campo não deve
         # transformar uma falha de rede em mudança permanente de idioma.
-        self._on_languages_loaded([])
+        self._language_pairs = None
+        self._refresh_translation_targets()
         log.warning(f"Lista de idiomas indisponível: {msg}")
 
     def check_and_download_lang(self, index):
@@ -760,6 +832,10 @@ class MainWindow(QMainWindow):
         # Extrai o "en" ou "es" que escondemos no item
         target_lang = self.combo_lang.itemData(index)
         if not target_lang: return
+        source = self.config.get_audio('source_lang')
+        if not source or not any(origin == source and code == target_lang
+                                 for origin, _, code in (self._language_pairs or [])):
+            return
 
         # Um download já em andamento não deve ser atropelado: a thread antiga
         # continuaria rodando e escreveria no diálogo de progresso novo.

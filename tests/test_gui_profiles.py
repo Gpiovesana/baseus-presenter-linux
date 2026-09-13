@@ -38,6 +38,9 @@ class GuiTestCase(unittest.TestCase):
         cls._app = QApplication.instance() or QApplication([])
 
     def setUp(self):
+        language_dialog = mock.patch('app.gui.QInputDialog.getItem', return_value=('Português (pt)', True))
+        language_dialog.start()
+        self.addCleanup(language_dialog.stop)
         for target, value in (("app.gui.ARGOS_GUI_AVAILABLE", False),
                               ("app.gui.sd.query_devices", [])):
             patcher = (mock.patch(target, return_value=value) if isinstance(value, list)

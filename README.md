@@ -22,6 +22,10 @@ Um software open-source não-oficial que desbloqueia e expande todas as funciona
 
 > 🐧 **Compatibilidade:** Testado no Zorin OS. Projetado para distribuições Linux baseadas em Debian/Ubuntu. Testes da comunidade em outras distribuições são bem-vindos.
 
+No checkout de desenvolvimento há integração **experimental com GNOME 46 em
+Wayland**, por extensão local. Preparação, limites e testes em
+[docs/wayland.md](docs/wayland.md). X11 mantém o overlay existente.
+
 ## ✨ Funcionalidades
 
 * **Ferramentas Visuais de Apresentação:**
@@ -78,7 +82,7 @@ durante a atualização; a escolha estará disponível nas próximas atualizaç�
 
 ## Desinstalação
 
-Abra **Configurações → Geral → Desinstalar Baseus Presenter…**, ou procure
+Abra **Configurações → Desinstalar Baseus Presenter…**, ou procure
 **Desinstalar Baseus Presenter** no menu de aplicativos. O terminal primeiro
 mostra um aviso: é necessário digitar `DESINSTALAR` para continuar. Enter ou
 fechar o terminal cancela. A senha administrativa é solicitada somente para
@@ -99,7 +103,7 @@ se instalou em outra pasta). O mesmo aviso de confirmação será exibido.
 
 ## ⚙️ Como usar
 
-Em **Configurações → Geral → Idioma da interface**, escolha **Automático — idioma
+Em **Configurações → Idioma da interface**, escolha **Automático — idioma
 do sistema**, **Português** ou **English**. A escolha fica salva e é aplicada
 depois de encerrar e abrir o aplicativo novamente. Em modo automático, português
 e inglês são reconhecidos; outros idiomas usam inglês como alternativa.
@@ -119,7 +123,7 @@ o desinstalador também respeita a escolha salva no aplicativo.
 
   * Baixe um modelo de idioma no site oficial do [Vosk Models](https://alphacephei.com/vosk/models).
 
-  * Descompacte a pasta, vá na aba Áudio e Idioma do aplicativo, clique em + Adicionar pasta e aponte para o modelo baixado.
+  * Descompacte a pasta, vá em Áudio e tradução, clique em Adicionar e aponte para o modelo baixado.
 
 ## 🎮 Controles do Passador
 * Os botões do hardware foram mapeados via engenharia reversa para operar o sistema:
@@ -231,7 +235,7 @@ choice becomes available for subsequent updates.
 
 ## Uninstallation
 
-Open **Configurações → Geral → Desinstalar Baseus Presenter…** (Settings → General
+Open **Configurações → Desinstalar Baseus Presenter…** (Settings
 → Uninstall Baseus Presenter), or search for **Desinstalar Baseus Presenter** in
 your applications menu. Interface labels follow the selected language.
 The terminal first displays a warning: you must type `DESINSTALAR` to continue.
@@ -253,7 +257,7 @@ installed it elsewhere). The same confirmation warning will appear.
 
 ## ⚙️ How to use
 
-In **Settings → General → Interface language**, choose **Automatic — system
+In **Settings → Interface language**, choose **Automatic — system
 language**, **Português**, or **English**. The preference is saved and takes effect
 after quitting and reopening the application. Automatic mode recognizes Portuguese
 and English and falls back to English for unsupported languages. This setting does
@@ -273,7 +277,7 @@ uninstaller also honors the preference saved in the application.
 
   * Download a language model from the official [Vosk Models](https://alphacephei.com/vosk/models) website.
 
-  * Extract the folder, go to the Audio and Language tab in the application, click + Add folder..., and point to the downloaded model.
+  * Extract the folder, go to Audio and translation in the application, click Add, and point to the downloaded model.
   
 ## 🎮 Presenter Controls
 * Hardware buttons were mapped via reverse engineering to operate the system:

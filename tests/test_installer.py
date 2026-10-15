@@ -102,10 +102,24 @@ if len(sys.argv) == 3 and sys.argv[1] == '--register-desktop':
         (release / "version").write_text("2.0.0\n")
         (release / "updater.sh").write_text("#!/bin/bash\n")
         (release / "uninstall.sh").write_text("#!/bin/bash\n")
+        shutil.copyfile(ROOT / 'app/system_requirements.py', release / 'app/system_requirements.py')
+        (release / 'app/system-requirements.json').write_text('{"schema":1,"revision":1}')
         archive = self.root / "release.tar.gz"
         with tarfile.open(archive, "w:gz") as output:
             output.add(release, arcname="baseus-presenter-linux-2.0.0")
         self.env.update(FAKE_API=str(self.api), FAKE_RELEASE=str(archive))
+
+    def test_success_records_applied_system_requirements(self):
+        result = self.run_installer('--no-autostart')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        state = json.loads((self.install / '.system-requirements.json').read_text())
+        self.assertEqual(state, {'schema': 1, 'revision': 1})
+
+    def test_failed_install_does_not_certify_legacy_installation(self):
+        self.env['FAIL_PIP'] = '1'
+        result = self.run_installer('--no-autostart')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.install / '.system-requirements.json').exists())
 
     @staticmethod
     def executable(path, contents):
@@ -192,7 +206,10 @@ if len(sys.argv) == 3 and sys.argv[1] == '--register-desktop':
         self.assertGreaterEqual(result.stdout.count("[y/n]"), 3)
 
     def test_install_without_terminal_requires_explicit_autostart_choice(self):
-        result = self.run_installer()
+        result = subprocess.run(
+            ["bash", str(ROOT / "install.sh")],
+            env=self.env, text=True, capture_output=True, timeout=15, start_new_session=True,
+        )
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         self.assert_old_install_preserved()
         self.assertIn("--autostart", result.stdout + result.stderr)

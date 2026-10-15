@@ -1,0 +1,6 @@
+{
+  "uuid": "baseus-overlay-probe@baseus.local",
+  "name": "Baseus Overlay Probe (temporário)",
+  "description": "Diagnóstico isolado de overlay e input; remove os atores após 30 segundos.",
+  "shell-version": ["46"]
+}

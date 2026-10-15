@@ -3,28 +3,21 @@ import os
 import configparser
 import re
 import copy
-import contextlib
-import socket
-import threading
 import shutil
 from pathlib import Path
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QSlider, QComboBox, QPushButton, QSystemTrayIcon, QMenu,
-                             qApp, QTabWidget, QColorDialog, QFileDialog, QFormLayout, QInputDialog, QMessageBox, QCheckBox, QProgressDialog, QStyle)
-from PyQt5.QtCore import Qt, pyqtSignal, QThread, QTimer, QProcess, QLocale
+                             qApp, QColorDialog, QFileDialog, QInputDialog, QMessageBox, QCheckBox, QProgressDialog, QStyle)
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QProcess, QLocale
 from PyQt5.QtGui import QColor, QIcon, QPixmap, QPainter, QPen
 import sounddevice as sd
 
-try:
-    import argostranslate.package
-    import argostranslate.translate
-    ARGOS_GUI_AVAILABLE = True
-except ImportError:
-    ARGOS_GUI_AVAILABLE = False
 
 from .logger import get_logger
 from .config import Config
 from .i18n import tr
+from . import models
+from .models import LanguageLoadThread, PackageInstallThread, ARGOS_AVAILABLE as ARGOS_GUI_AVAILABLE
 from .uninstall import validate_installation, register_desktop
 
 log = get_logger(__name__)
@@ -35,102 +28,6 @@ SAVE_DEBOUNCE_MS = 400
 # sistema" (que é representado por None no combo_mic).
 _UNSET = object()
 
-# #25: timeouts para as operações de rede do Argos. A biblioteca usa urllib
-# internamente e NÃO expõe parâmetro de timeout, então o único ponto de
-# controle é o default de socket. Sem isto, uma conexão que "pendura"
-# (servidor aceita o TCP mas nunca responde) deixa a thread viva
-# indefinidamente — e o stop_threads() do encerramento acaba tendo de
-# recorrer a terminate().
-ARGOS_INDEX_TIMEOUT_S = 15      # listar/atualizar o índice de pacotes
-ARGOS_DOWNLOAD_TIMEOUT_S = 120  # baixar o pacote (~30MB)
-
-
-_socket_timeout_lock = threading.RLock()
-
-
-@contextlib.contextmanager
-def socket_timeout(seconds):
-    """
-    Aplica um timeout de socket ao redor de uma operação de rede.
-
-    ATENÇÃO: setdefaulttimeout é GLOBAL do processo. Isso só é aceitável
-    aqui porque o Argos é a única origem de I/O de rede do aplicativo e
-    porque essas chamadas são serializadas (um download por vez, garantido
-    por check_and_download_lang). O valor anterior é sempre restaurado.
-    """
-    with _socket_timeout_lock:
-        anterior = socket.getdefaulttimeout()
-        socket.setdefaulttimeout(seconds)
-        try:
-            yield
-        finally:
-            socket.setdefaulttimeout(anterior)
-
-
-class LanguageLoadThread(QThread):
-    """
-    Carrega o índice de idiomas do Argos FORA da thread da GUI.
-
-    populate_languages() rodava síncrono no __init__ da MainWindow. Como
-    get_available_packages() faz I/O de rede/disco, a janela congelava até o
-    timeout quando não havia internet — sem qualquer feedback ao usuário.
-    """
-    loaded = pyqtSignal(list)   # [(origem, nome_destino, codigo_destino), ...]
-    failed = pyqtSignal(str)
-
-    def run(self):
-        try:
-            # #25: sem timeout, esta thread podia ficar pendurada para
-            # sempre numa conexão lenta/travada, sobrevivendo ao
-            # encerramento do app.
-            with socket_timeout(ARGOS_INDEX_TIMEOUT_S):
-                argostranslate.package.update_package_index()
-                pacotes = argostranslate.package.get_available_packages()
-            idiomas = [(p.from_code, p.to_name, p.to_code) for p in pacotes]
-            self.loaded.emit(idiomas)
-        except Exception as e:
-            log.exception(f"Erro ao carregar idiomas do Argos: {e}")
-            self.failed.emit(str(e))
-
-
-class PackageInstallThread(QThread):
-    finished = pyqtSignal(bool, str)
-    def __init__(self, from_code, to_code):
-        super().__init__()
-        self.from_code = from_code
-        self.to_code = to_code
-
-    def run(self):
-        try:
-            # #25: `update_package_index()` e `download()` fazem I/O de rede
-            # sem timeout próprio. Um servidor que aceita a conexão mas
-            # nunca responde mantinha esta thread viva indefinidamente,
-            # forçando o terminate() no encerramento do app.
-            with socket_timeout(ARGOS_INDEX_TIMEOUT_S):
-                argostranslate.package.update_package_index()
-                available = argostranslate.package.get_available_packages()
-
-            pkg = next((p for p in available if p.from_code == self.from_code and p.to_code == self.to_code), None)
-            if not pkg:
-                self.finished.emit(False, tr('Pacote não encontrado no servidor.'))
-                return
-
-            # Timeout mais generoso: aqui são ~30MB. O timeout do socket é
-            # por operação de leitura, não para o download inteiro, então
-            # ele interrompe um servidor travado sem abortar um download
-            # legítimo porém lento.
-            with socket_timeout(ARGOS_DOWNLOAD_TIMEOUT_S):
-                path = pkg.download()
-
-            argostranslate.package.install_from_path(path)
-            self.finished.emit(True, tr('Instalação concluída!'))
-        except socket.timeout:
-            log.error("Timeout de rede ao baixar o pacote de idioma do Argos.")
-            self.finished.emit(
-                False, tr('Tempo de conexão esgotado. Verifique sua internet e tente de novo.'))
-        except Exception as e:
-            log.exception(f"Falha na instalação do pacote de idioma: {e}")
-            self.finished.emit(False, str(e))
 
 
 class MainWindow(QMainWindow):
@@ -154,169 +51,87 @@ class MainWindow(QMainWindow):
         self._save_timer.setInterval(SAVE_DEBOUNCE_MS)
         self._save_timer.timeout.connect(self._save_now)
         self.setWindowTitle(tr('Baseus Presenter - Configurações (v2.0)'))
-        self.setWindowIcon(QIcon.fromTheme("input-mouse"))
-        self.setMinimumWidth(680)
-
-        main_widget = QWidget()
-        self.setCentralWidget(main_widget)
-        main_layout = QVBoxLayout(main_widget)
-
-        # --- A BARRA DE PERFIS VIP ---
-        row_perfil = QHBoxLayout()
-        row_perfil.addWidget(QLabel(tr('<b>Perfil:</b>')))
-
+        self.setWindowIcon(QIcon(str(Path(__file__).resolve().parent / "resources/baseus-presenter.png")))
         self.combo_profiles = QComboBox()
         self.combo_profiles.currentTextChanged.connect(self.change_profile)
-
-        btn_new_profile = QPushButton(tr('Novo Perfil'))
-        btn_new_profile.clicked.connect(self.new_profile)
-
-        btn_del_profile = QPushButton(tr('Excluir'))
-        btn_del_profile.clicked.connect(self.delete_profile)
-
-        row_perfil.addWidget(self.combo_profiles, stretch=1)
-        row_perfil.addWidget(btn_new_profile)
-        row_perfil.addWidget(btn_del_profile)
-
-        main_layout.addLayout(row_perfil)
-
-        line = QWidget(); line.setFixedHeight(1); line.setStyleSheet("background-color: #cccccc; margin-bottom: 5px;")
-        main_layout.addWidget(line)
-
-        # 🔋 O Visor de Bateria
         self.lbl_battery = QPushButton(tr(' Bateria: Aguardando...'))
+        self._battery_text = self.lbl_battery.text()
         self.lbl_battery.setFlat(True)
-        self.lbl_battery.setStyleSheet("""
-            text-align: left;
-            color: #4a90e2;
-            font-weight: bold;
-            border: none;
-        """)
-        main_layout.addWidget(self.lbl_battery)
-
-        tabs = QTabWidget()
-        main_layout.addWidget(tabs)
-
-        # --- ABA 1: VISUAL ---
-        tab_visual = QWidget()
-        form_visual = QFormLayout(tab_visual)
-
-        self.laser_slider = QSlider(Qt.Horizontal); self.laser_slider.setRange(10, 100)
-        self.laser_slider.valueChanged.connect(self.save_settings)
-
-        box_cores = QHBoxLayout()
+        self.laser_slider = QSlider(Qt.Horizontal); self.laser_slider.setRange(10,100)
+        self.lupa_slider = QSlider(Qt.Horizontal); self.lupa_slider.setRange(100,500)
+        self.combo_lupa_shape = QComboBox()
+        self.combo_lupa_shape.addItem(tr('Circular'), 'circular')
+        self.combo_lupa_shape.addItem(tr('Quadrada'), 'square')
+        self.combo_lupa_shape.currentIndexChanged.connect(self.save_settings)
+        self.spotlight_slider = QSlider(Qt.Horizontal); self.spotlight_slider.setRange(100,800)
+        self.spotlight_opacity = QSlider(Qt.Horizontal); self.spotlight_opacity.setRange(50,255)
+        for slider in (self.laser_slider,self.lupa_slider,self.spotlight_slider,self.spotlight_opacity):
+            slider.valueChanged.connect(self.save_settings)
         self.btn_laser_color = QPushButton(tr('Cor do Laser'))
-        self.btn_laser_color.clicked.connect(lambda: self.pick_color("laser_color", self.btn_laser_color))
-
         self.btn_pincel_color = QPushButton(tr('Cor do Pincel'))
-        self.btn_pincel_color.clicked.connect(lambda: self.pick_color("pincel_color", self.btn_pincel_color))
-        box_cores.addWidget(self.btn_laser_color); box_cores.addWidget(self.btn_pincel_color)
-
-        self.lupa_slider = QSlider(Qt.Horizontal); self.lupa_slider.setRange(100, 500)
-        self.lupa_slider.valueChanged.connect(self.save_settings)
-
-        self.spotlight_slider = QSlider(Qt.Horizontal); self.spotlight_slider.setRange(100, 800)
-        self.spotlight_slider.valueChanged.connect(self.save_settings)
-
-        self.spotlight_opacity = QSlider(Qt.Horizontal); self.spotlight_opacity.setRange(50, 255)
-        self.spotlight_opacity.valueChanged.connect(self.save_settings)
-
-        form_visual.addRow(tr('Tamanho do Laser:'), self.laser_slider)
-        form_visual.addRow(tr('Cores:'), box_cores)
-        form_visual.addRow(tr('Tamanho da Lupa:'), self.lupa_slider)
-        form_visual.addRow(tr('Tamanho/Escuridão Spotlight:'), self.spotlight_slider)
-        form_visual.addRow("", self.spotlight_opacity)
-        tabs.addTab(tab_visual, tr('Visual e Ponteiro'))
-
-        # --- ABA 2: ÁUDIO & I.A. ---
-        tab_ia = QWidget()
-        form_ia = QFormLayout(tab_ia)
-
+        self.btn_laser_color.clicked.connect(lambda:self.pick_color('laser_color',self.btn_laser_color))
+        self.btn_pincel_color.clicked.connect(lambda:self.pick_color('pincel_color',self.btn_pincel_color))
         self.combo_mic = QComboBox()
-        self.combo_mic.addItem(tr('Padrão do Sistema (Automático)'), None)
+        self.combo_mic.addItem(tr('Padrão do Sistema (Automático)'),None)
         try:
-            for idx, dev in enumerate(sd.query_devices()):
-                if dev['max_input_channels'] > 0:
-                    self.combo_mic.addItem(f"{idx} - {dev['name']}", (idx, dev['name']))
+            for index,device in enumerate(sd.query_devices()):
+                if device['max_input_channels']>0:
+                    self.combo_mic.addItem(f"{index} - {device['name']}",(index,device['name']))
         except Exception as exc:
             log.warning(f"Não foi possível listar microfones: {exc}")
         self.combo_mic.currentIndexChanged.connect(self.save_settings)
-
-        box_modelos = QHBoxLayout()
         self.combo_models = QComboBox()
         self.combo_models.currentIndexChanged.connect(self.save_settings)
-
-        btn_add = QPushButton(tr('Adicionar')); btn_add.clicked.connect(self.add_model)
-        btn_del = QPushButton(tr('Remover')); btn_del.clicked.connect(self.delete_model)
-        btn_language = QPushButton(tr('Idioma do modelo'))
-        btn_language.clicked.connect(lambda: self._ensure_model_language(force=True))
-        box_modelos.addWidget(self.combo_models); box_modelos.addWidget(btn_add); box_modelos.addWidget(btn_del)
-        box_modelos.addWidget(btn_language)
-        # Guarda o path selecionado para só emitir model_changed quando o
-        # modelo REALMENTE mudar (evita reload do Vosk ao trocar outro campo
-        # qualquer que também dispare save_settings indiretamente). Setado de
-        # verdade em _load_profile_into_widgets(), chamado logo abaixo.
         self._last_model_path = None
-
-        row_txt = QHBoxLayout()
-        self.lbl_txt_path = QLabel(self.config.get("save_dir", os.path.expanduser("~")))
-        btn_txt = QPushButton(tr('Alterar Destino'))
-        btn_txt.clicked.connect(self.pick_txt_dir)
-        row_txt.addWidget(self.lbl_txt_path); row_txt.addWidget(btn_txt)
-
+        self.lbl_txt_path = QLabel(self.config.get('save_dir',os.path.expanduser('~')))
+        self.lbl_txt_path.setWordWrap(True)
         self.combo_lang = QComboBox()
         self.populate_languages()
         self.combo_lang.currentIndexChanged.connect(self.check_and_download_lang)
-
-        form_ia.addRow(tr('Microfone:'), self.combo_mic)
-        form_ia.addRow(tr('Modelo de Voz:'), box_modelos)
-        form_ia.addRow(tr('Salvar aulas (.txt) em:'), row_txt)
-        form_ia.addRow(tr('Traduzir para:'), self.combo_lang)
-        tabs.addTab(tab_ia, tr('Áudio e I.A.'))
-
-        # --- ABA 3: GERAL ---
-        tab_geral = QWidget()
-        form_geral = QFormLayout(tab_geral)
-
         self.combo_ui_language = QComboBox()
-        for label, code in ((tr("Automático — idioma do sistema"), "auto"),
-                            ("Português", "pt"), ("English", "en")):
-            self.combo_ui_language.addItem(label, code)
-        selected = self.combo_ui_language.findData(self.config.get("ui_language", "auto"))
-        self.combo_ui_language.setCurrentIndex(max(0, selected))
+        for label,code in ((tr('Automático — idioma do sistema'),'auto'),('Português','pt'),('English','en')):
+            self.combo_ui_language.addItem(label,code)
+        selected = self.combo_ui_language.findData(self.config.get('ui_language','auto'))
+        self.combo_ui_language.setCurrentIndex(max(0,selected))
         self.combo_ui_language.currentIndexChanged.connect(self.save_ui_language)
-        form_geral.addRow(tr("Idioma da interface:"), self.combo_ui_language)
-        language_note = QLabel(tr("A mudança de idioma será aplicada ao reiniciar o aplicativo."))
-        language_note.setWordWrap(True)
-        form_geral.addRow(language_note)
-
         self.combo_close = QComboBox()
-        self.combo_close.addItems([tr('Minimizar para a Bandeja (Segundo Plano)'), tr('Sair do Aplicativo completamente')])
+        self.combo_close.addItems([tr('Minimizar para a Bandeja (Segundo Plano)'),tr('Sair do Aplicativo completamente')])
         self.combo_close.currentIndexChanged.connect(self.save_settings)
-
-        self.check_legenda = QCheckBox(tr("Exibir legendas ao gravar"))
+        self.check_legenda = QCheckBox(tr('Exibir legendas ao gravar'))
         self.check_legenda.toggled.connect(self.save_settings)
-
         self.btn_check_update = QPushButton(tr('Verificar Atualizações'))
         self.btn_check_update.clicked.connect(self.manual_update_requested.emit)
-
         self.btn_uninstall = QPushButton(tr('Desinstalar Baseus Presenter…'))
         self.btn_uninstall.clicked.connect(self.request_uninstall)
         try:
             validate_installation(Path(__file__).resolve().parents[1])
-        except (OSError, ValueError):
+        except (OSError,ValueError):
             self.btn_uninstall.setEnabled(False)
             self.btn_uninstall.setToolTip(tr('Disponível apenas na versão instalada, fora de um checkout Git.'))
-
-        form_geral.addRow(tr('Ao clicar no X da janela:'), self.combo_close)
-        form_geral.addRow(tr('Visual:'), self.check_legenda)
-        form_geral.addRow(tr('Software:'), self.btn_check_update)
-        form_geral.addRow("", self.btn_uninstall)
-        tabs.addTab(tab_geral, tr('Geral'))
-
-        # Injeção inicial dos dados na tela
+        from .gui_layout import build_layout
+        build_layout(self)
         self.populate_profiles_combo()
         self._load_profile_into_widgets()
+
+    def refresh_visual_preview(self):
+        self.effects_canvas.settings = {
+            'laser_size':self.laser_slider.value(),
+            'lupa_size':self.lupa_slider.value(),
+            'lupa_shape':self.combo_lupa_shape.currentData() or self.config.get_visual('lupa_shape','circular'),
+            'spotlight_size':self.spotlight_slider.value(),
+            'spotlight_opacity':self.spotlight_opacity.value(),
+            'laser_color':self.config.get_visual('laser_color','#FF0000'),
+            'pincel_color':self.config.get_visual('pincel_color','#FF0000'),
+        }
+        for key,(label,name) in self.effect_value_labels.items():
+            value=self.effects_canvas.settings[key]
+            suffix=f'{round(value/255*100)}%' if key=='spotlight_opacity' else f'{value} px'
+            label.setText(name+'   '+suffix)
+        self.effects_canvas.update()
+
+    def refresh_model_language(self):
+        model=models.find_model(self.config,self.combo_models.currentData())
+        self.lbl_model_language.setText(tr('Idioma de origem: {0}',model.get('language') or tr('Não definido')))
 
     def save_ui_language(self):
         self.config.set("ui_language", self.combo_ui_language.currentData())
@@ -347,7 +162,8 @@ class MainWindow(QMainWindow):
 
         self.lbl_battery.setIcon(QIcon(pixmap))
         self.lbl_battery.setIconSize(pixmap.size())
-        self.lbl_battery.setText(tr(' Bateria: {0}%', percent))
+        self._battery_text = tr(' Bateria: {0}%', percent)
+        self.lbl_battery.setText(self._battery_text)
 
     # --- CONTROLES DE ATUALIZAÇÃO ---
     def set_update_checking_state(self, is_checking):
@@ -393,6 +209,7 @@ class MainWindow(QMainWindow):
         self.combo_profiles.addItems(list(self.config.get("profiles", {}).keys()))
         self.combo_profiles.setCurrentText(self.config.get("active_profile", "Padrão"))
         self.combo_profiles.blockSignals(False)
+        self.btn_delete_profile.setEnabled(self.combo_profiles.count()>1)
 
     def change_profile(self, profile_name):
         with self.config.mutate() as data:
@@ -468,6 +285,7 @@ class MainWindow(QMainWindow):
 
         def block_all(block):
             self.laser_slider.blockSignals(block); self.lupa_slider.blockSignals(block)
+            self.combo_lupa_shape.blockSignals(block)
             self.spotlight_slider.blockSignals(block); self.spotlight_opacity.blockSignals(block)
             self.combo_lang.blockSignals(block); self.combo_mic.blockSignals(block)
             self.combo_models.blockSignals(block); self.check_legenda.blockSignals(block)
@@ -478,6 +296,9 @@ class MainWindow(QMainWindow):
 
         self.laser_slider.setValue(p["visual"].get("laser_size", 30))
         self.lupa_slider.setValue(p["visual"].get("lupa_size", 250))
+        shape = p["visual"].get("lupa_shape", "circular")
+        idx_shape = self.combo_lupa_shape.findData(shape)
+        self.combo_lupa_shape.setCurrentIndex(max(0, idx_shape))
         self.spotlight_slider.setValue(p["visual"].get("spotlight_size", 300))
         self.spotlight_opacity.setValue(p["visual"].get("spotlight_opacity", 160))
         self.set_btn_color(self.btn_laser_color, p["visual"].get("laser_color", "#FF0000"))
@@ -516,6 +337,8 @@ class MainWindow(QMainWindow):
         # widget comparava contra o modelo do perfil anterior e emitia
         # model_changed de novo, à toa.
         self._last_model_path = p["audio"].get("selected_model_path", "")
+        self.refresh_visual_preview()
+        self.refresh_model_language()
         self._refresh_translation_targets()
         QTimer.singleShot(0, self._ensure_model_language)
 
@@ -536,6 +359,7 @@ class MainWindow(QMainWindow):
 
             visual["laser_size"] = self.laser_slider.value()
             visual["lupa_size"] = self.lupa_slider.value()
+            visual["lupa_shape"] = self.combo_lupa_shape.currentData() or "circular"
             visual["spotlight_size"] = self.spotlight_slider.value()
             visual["spotlight_opacity"] = self.spotlight_opacity.value()
 
@@ -551,6 +375,7 @@ class MainWindow(QMainWindow):
         self._sync_input_device()
         self._last_model_path = new_model_path
         self._save_timer.start()
+        self.refresh_visual_preview()
         self.config_updated.emit()
 
         # save_settings() é chamado por QUALQUER slider/combo (laser, spotlight,
@@ -630,7 +455,8 @@ class MainWindow(QMainWindow):
             self.input_device_changed.emit()
 
     def set_btn_color(self, btn, color_hex):
-        btn.setStyleSheet(f"background-color: {color_hex}; color: white; font-weight: bold; border: 1px solid black;")
+        btn.setStyleSheet(f"border-left: 8px solid {QColor(color_hex).name()};")
+        btn.setToolTip(QColor(color_hex).name())
 
     def pick_color(self, config_key, btn):
         cor_atual = QColor(self.config.get_visual(config_key, "#FF0000"))
@@ -669,13 +495,7 @@ class MainWindow(QMainWindow):
                 language = self._ask_model_language(nome)
                 if not language:
                     return
-                with self.config.mutate() as data:
-                    models = data.setdefault("models", [])
-                    # A mesma pasta representa o mesmo modelo em todos os perfis.
-                    models[:] = [m for m in models if m.get("path") != diretorio]
-                    models.append({"label": nome, "path": diretorio, "language": language})
-                    active = data["active_profile"]
-                    data["profiles"][active]["audio"]["selected_model_path"] = diretorio
+                models.add_model(self.config, diretorio, nome, language)
 
                 self._save_now()
                 self._load_profile_into_widgets()
@@ -706,7 +526,7 @@ class MainWindow(QMainWindow):
         path = self.config.get_audio('selected_model_path')
         if not path:
             return
-        model = next((m for m in self.config.get('models', []) if m.get('path') == path), {})
+        model = models.find_model(self.config, path)
         if model.get('language') and not force:
             return
         self._model_language_prompt_open = True
@@ -715,16 +535,11 @@ class MainWindow(QMainWindow):
         finally:
             self._model_language_prompt_open = False
         if language:
-            with self.config.mutate() as data:
-                models = data.setdefault('models', [])
-                entry = next((m for m in models if m.get('path') == path), None)
-                if entry is None:
-                    entry = {'path': path, 'label': path}
-                    models.append(entry)
-                entry['language'] = language
+            models.set_model_language(self.config, path, language)
             self._save_now()
             self.config_updated.emit()
         self._refresh_translation_targets()
+        self.refresh_model_language()
 
     def _refresh_translation_targets(self):
         source = self.config.get_audio('source_lang')
@@ -743,12 +558,8 @@ class MainWindow(QMainWindow):
         if not path:
             return
 
-        model_label = None
-        with self.config.mutate() as data:
-            models = data.get("models", [])
-            model = next((m for m in models if m.get("path") == path), None)
-            if model:
-                model_label = model.get("label")
+        model = models.find_model(self.config, path)
+        model_label = model.get('label')
 
         if not model:
             return
@@ -757,12 +568,7 @@ class MainWindow(QMainWindow):
         if reply != QMessageBox.Yes:
             return
 
-        with self.config.mutate() as data:
-            models = data.get("models", [])
-            data["models"] = [m for m in models if m.get("path") != path]
-            for p_data in data["profiles"].values():
-                if p_data["audio"].get("selected_model_path") == path:
-                    p_data["audio"]["selected_model_path"] = ""
+        models.remove_model(self.config, path)
 
         self._save_now()
         self._load_profile_into_widgets()
@@ -847,11 +653,7 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            installed = argostranslate.translate.get_installed_languages()
-            source_lang = self.config.get_audio("source_lang", "pt")
-            from_lang = next((l for l in installed if l.code == source_lang), None)
-            to_lang = next((l for l in installed if l.code == target_lang), None)
-            if from_lang and to_lang and from_lang.get_translation(to_lang):
+            if models.has_translation(source, target_lang):
                 return
         except Exception as e:
             log.exception(f"Falha ao consultar idiomas instalados: {e}")
@@ -883,6 +685,10 @@ class MainWindow(QMainWindow):
         """Slot para avisos de permissão/hardware vindos das threads."""
         log.warning(msg)
         self.lbl_battery.setText(f" {msg}")
+
+    def clear_warning(self, msg):
+        if self.lbl_battery.text() == f" {msg}":
+            self.lbl_battery.setText(self._battery_text)
 
     def stop_threads(self):
         """

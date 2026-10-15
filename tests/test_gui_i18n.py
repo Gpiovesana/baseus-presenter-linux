@@ -1,5 +1,4 @@
 import json
-from PyQt5.QtWidgets import QTabWidget
 from test_gui_profiles import GuiTestCase
 from app import i18n
 
@@ -10,7 +9,7 @@ class TestGuiLanguage(GuiTestCase):
         self.addCleanup(i18n.install_translator, self._app, "pt")
         win = self.make_window()
         self.assertEqual(win.btn_check_update.text(), "Check for Updates")
-        self.assertEqual(win.findChild(QTabWidget).tabText(2), "General")
+        self.assertEqual(win.nav_buttons[3].text(), "Settings")
         self.assertEqual(win.combo_profiles.currentText(), "Padrão")
         audio_before = win.config.snapshot()["profiles"]["Padrão"]["audio"]
         win.combo_ui_language.setCurrentIndex(win.combo_ui_language.findData("pt"))

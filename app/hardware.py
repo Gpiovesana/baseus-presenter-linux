@@ -340,7 +340,7 @@ class HardwareReader(QThread):
                     try:
                         for ev in dev.read():
                             if ev.type == e.EV_KEY:
-                                if ev.code == e.KEY_B: continue
+                                if ev.code in (e.KEY_B, e.KEY_E): continue
                                 # #13 (revisado após teste manual): o filtro
                                 # cobria só BTN_LEFT/KEY_ESC, mas o passador
                                 # emite OUTRAS teclas via evdev durante o

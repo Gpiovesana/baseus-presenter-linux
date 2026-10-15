@@ -33,6 +33,7 @@ DEFAULT_CONFIG = {
                 "laser_color": "#FF0000",
                 "pincel_color": "#FF0000",
                 "lupa_size": 250,
+                "lupa_shape": "circular",
                 "spotlight_size": 300,
                 "spotlight_opacity": 160
             },

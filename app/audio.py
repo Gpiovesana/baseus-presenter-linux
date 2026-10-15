@@ -609,13 +609,23 @@ class AudioThread(QThread):
                 return text
             if source_lang == target_lang:
                 return text
+            started = time.perf_counter()
+            success = False
             try:
-                return argostranslate.translate.translate(text, source_lang, target_lang)
+                translated = argostranslate.translate.translate(text, source_lang, target_lang)
+                success = True
+                return translated
             except Exception as e:
                 self.audio_warning.emit(
                     tr('⚠️ Erro de Tradução: Pacote {0}->{1} ausente!', source_lang, target_lang))
                 log.warning(f"Erro Argos: {e}")
                 return text
+            finally:
+                log.debug(
+                    "translation duration_ms=%.3f queue_depth=%d chars=%d source=%s target=%s success=%s",
+                    (time.perf_counter() - started) * 1000, self.q.qsize(), len(text),
+                    source_lang, target_lang, success,
+                )
         return text
         
     def stop(self):

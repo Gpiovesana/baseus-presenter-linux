@@ -163,7 +163,7 @@ curl -sS -fL --connect-timeout 10 --max-time 180 \
 mkdir -p "$WORK_DIR/extracted"
 tar -xzf "$WORK_DIR/release.tar.gz" -C "$WORK_DIR/extracted"
 EXTRACTED_DIR="$(find "$WORK_DIR/extracted" -mindepth 1 -maxdepth 1 -type d -print -quit)"
-for file in app app/uninstall.py baseus_app.py requirements.txt version updater.sh uninstall.sh; do
+for file in app app/uninstall.py app/system_requirements.py app/system-requirements.json baseus_app.py requirements.txt version updater.sh uninstall.sh; do
     if [[ -z "$EXTRACTED_DIR" || ! -e "$EXTRACTED_DIR/$file" ]]; then
         say "❌ ERRO: release inválida: '$file' não encontrado." "❌ ERROR: invalid release: '$file' not found."
         exit 1
@@ -183,8 +183,21 @@ if [[ "${PACKAGE_VERSION#v}" != "${RELEASE_TAG#v}" ]]; then
     exit 1
 fi
 
+# Revision 1 is the apt/udev procedure above. A future revision must update
+# both that procedure and this constant; never certify an unknown procedure.
+APPLIED_SYSTEM_REVISION=1
+if ! python3 "$EXTRACTED_DIR/app/system_requirements.py" validate \
+    "$EXTRACTED_DIR/app/system-requirements.json" "$INSTALL_DIR" \
+    --applied-revision "$APPLIED_SYSTEM_REVISION"; then
+    say "❌ Requisitos da release incompatíveis com este instalador. Use o instalador atual." "❌ Release requirements are incompatible with this installer. Use the current installer."
+    exit 1
+fi
+
 mkdir -p "$STAGING_DIR"
 cp -a "$EXTRACTED_DIR/app" "$STAGING_DIR/"
+if [[ -d "$EXTRACTED_DIR/extensions" ]]; then
+    cp -a "$EXTRACTED_DIR/extensions" "$STAGING_DIR/"
+fi
 cp "$EXTRACTED_DIR/baseus_app.py" "$EXTRACTED_DIR/requirements.txt" \
    "$EXTRACTED_DIR/version" "$EXTRACTED_DIR/updater.sh" \
    "$EXTRACTED_DIR/uninstall.sh" "$STAGING_DIR/"
@@ -270,7 +283,8 @@ Comment=Unofficial driver for the Baseus Orange Dot AI presenter
 Comment[pt]=Driver não-oficial para o passador Baseus Orange Dot AI
 Exec="$PYTHON" "$INSTALL_DIR/baseus_app.py"
 Path=$INSTALL_DIR
-Icon=input-tablet
+Icon=$INSTALL_DIR/app/resources/baseus-presenter.png
+StartupWMClass=baseus_app.py
 Terminal=false
 Categories=Utility;
 StartupNotify=false
@@ -286,6 +300,11 @@ else
     say "✓ Inicialização automática desativada (use o menu de aplicativos pra abrir)." "✓ Automatic startup disabled (open from the applications menu)."
 fi
 python3 "$INSTALL_DIR/app/uninstall.py" --register-desktop "$INSTALL_DIR"
+# Publish the receipt only after apt, udev, venv, activation and launchers succeed.
+# A failure here triggers the same rollback as any other activation failure.
+python3 "$INSTALL_DIR/app/system_requirements.py" record \
+    "$INSTALL_DIR/app/system-requirements.json" "$INSTALL_DIR" \
+    --applied-revision "$APPLIED_SYSTEM_REVISION"
 
 echo ""
 say "✅ 6/6 INSTALAÇÃO DA RELEASE $RELEASE_TAG CONCLUÍDA!" "✅ 6/6 RELEASE $RELEASE_TAG INSTALLATION COMPLETE!"

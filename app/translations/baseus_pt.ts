@@ -660,5 +660,337 @@ Deseja baixar? (Aprox. 30MB)</translation>
       <source>{0} (indisponível)</source>
       <translation>{0} (indisponível)</translation>
     </message>
+    <message>
+      <source>O servidor pediu uma pausa. Tente novamente em {0} segundos.</source>
+      <translation>O servidor pediu uma pausa. Tente novamente em {0} segundos.</translation>
+    </message>
+    <message>
+      <source>01  /  CLAREZA NA APRESENTAÇÃO</source>
+      <translation>01  /  CLAREZA NA APRESENTAÇÃO</translation>
+    </message>
+    <message>
+      <source>A inicialização automática é escolhida na instalação ou na confirmação de uma atualização.</source>
+      <translation>A inicialização automática é escolhida na instalação ou na confirmação de uma atualização.</translation>
+    </message>
+    <message>
+      <source>A navegação continua sob controle do aplicativo de apresentação.</source>
+      <translation>A navegação continua sob controle do aplicativo de apresentação.</translation>
+    </message>
+    <message>
+      <source>APAGAR</source>
+      <translation>APAGAR</translation>
+    </message>
+    <message>
+      <source>APRESENTAÇÃO DE EXEMPLO</source>
+      <translation>APRESENTAÇÃO DE EXEMPLO</translation>
+    </message>
+    <message>
+      <source>Ajustar ponteiro e efeitos</source>
+      <translation>Ajustar ponteiro e efeitos</translation>
+    </message>
+    <message>
+      <source>Ajustes do perfil selecionado.</source>
+      <translation>Ajustes do perfil selecionado.</translation>
+    </message>
+    <message>
+      <source>Alterna a tela preta para trazer a atenção de volta a você.</source>
+      <translation>Alterna a tela preta para trazer a atenção de volta a você.</translation>
+    </message>
+    <message>
+      <source>Alterna entre laser, lupa e spotlight.</source>
+      <translation>Alterna entre laser, lupa e spotlight.</translation>
+    </message>
+    <message>
+      <source>Aplicativo</source>
+      <translation>Aplicativo</translation>
+    </message>
+    <message>
+      <source>Arquivos de transcrição</source>
+      <translation>Arquivos de transcrição</translation>
+    </message>
+    <message>
+      <source>Ativa a ferramenta visual selecionada enquanto o botão estiver pressionado.</source>
+      <translation>Ativa a ferramenta visual selecionada enquanto o botão estiver pressionado.</translation>
+    </message>
+    <message>
+      <source>Ativa o desenho sobre a apresentação.</source>
+      <translation>Ativa o desenho sobre a apresentação.</translation>
+    </message>
+    <message>
+      <source>Ativa ou desativa as legendas traduzidas.</source>
+      <translation>Ativa ou desativa as legendas traduzidas.</translation>
+    </message>
+    <message>
+      <source>Avança a apresentação usando o comando nativo do passador.</source>
+      <translation>Avança a apresentação usando o comando nativo do passador.</translation>
+    </message>
+    <message>
+      <source>Avançar</source>
+      <translation>Avançar</translation>
+    </message>
+    <message>
+      <source>Baseus Presenter — Configurações</source>
+      <translation>Baseus Presenter — Configurações</translation>
+    </message>
+    <message>
+      <source>Botões</source>
+      <translation>Botões</translation>
+    </message>
+    <message>
+      <source>CLIQUE</source>
+      <translation>CLIQUE</translation>
+    </message>
+    <message>
+      <source>CLIQUE DUPLO</source>
+      <translation>CLIQUE DUPLO</translation>
+    </message>
+    <message>
+      <source>Confira novas versões e a opção de inicialização automática.</source>
+      <translation>Confira novas versões e a opção de inicialização automática.</translation>
+    </message>
+    <message>
+      <source>Conheça seu passador</source>
+      <translation>Conheça seu passador</translation>
+    </message>
+    <message>
+      <source>DICA</source>
+      <translation>DICA</translation>
+    </message>
+    <message>
+      <source>DISPOSITIVO</source>
+      <translation>DISPOSITIVO</translation>
+    </message>
+    <message>
+      <source>Desenhar e apagar</source>
+      <translation>Desenhar e apagar</translation>
+    </message>
+    <message>
+      <source>Disponível no aplicativo instalado. Requer confirmação explícita.</source>
+      <translation>Disponível no aplicativo instalado. Requer confirmação explícita.</translation>
+    </message>
+    <message>
+      <source>Dê destaque ao que importa.</source>
+      <translation>Dê destaque ao que importa.</translation>
+    </message>
+    <message>
+      <source>Entrada e reconhecimento</source>
+      <translation>Entrada e reconhecimento</translation>
+    </message>
+    <message>
+      <source>Escolha uma ferramenta e veja os ajustes no slide de exemplo.</source>
+      <translation>Escolha uma ferramenta e veja os ajustes no slide de exemplo.</translation>
+    </message>
+    <message>
+      <source>Escurecimento</source>
+      <translation>Escurecimento</translation>
+    </message>
+    <message>
+      <source>Esta escolha acompanha o perfil selecionado no topo.</source>
+      <translation>Esta escolha acompanha o perfil selecionado no topo.</translation>
+    </message>
+    <message>
+      <source>Estas escolhas acompanham o perfil selecionado.</source>
+      <translation>Estas escolhas acompanham o perfil selecionado.</translation>
+    </message>
+    <message>
+      <source>Estas preferências valem para todos os perfis.</source>
+      <translation>Estas preferências valem para todos os perfis.</translation>
+    </message>
+    <message>
+      <source>IDIOMA</source>
+      <translation>IDIOMA</translation>
+    </message>
+    <message>
+      <source>Idioma da interface e ação ao fechar a janela são escolhas globais. Efeitos, áudio, tradução e exibição de legendas acompanham cada perfil.</source>
+      <translation>Idioma da interface e ação ao fechar a janela são escolhas globais. Efeitos, áudio, tradução e exibição de legendas acompanham cada perfil.</translation>
+    </message>
+    <message>
+      <source>Ilustração esquemática · Funções atuais, sem remapeamento de botões.</source>
+      <translation>Ilustração esquemática · Funções atuais, sem remapeamento de botões.</translation>
+    </message>
+    <message>
+      <source>Inicia ou encerra a gravação da transcrição.</source>
+      <translation>Inicia ou encerra a gravação da transcrição.</translation>
+    </message>
+    <message>
+      <source>Laser digital</source>
+      <translation>Laser digital</translation>
+    </message>
+    <message>
+      <source>Legendas durante a gravação</source>
+      <translation>Legendas durante a gravação</translation>
+    </message>
+    <message>
+      <source>Legendas traduzidas</source>
+      <translation>Legendas traduzidas</translation>
+    </message>
+    <message>
+      <source>Lupa</source>
+      <translation>Lupa</translation>
+    </message>
+    <message>
+      <source>Microfone</source>
+      <translation>Microfone</translation>
+    </message>
+    <message>
+      <source>Mova o mouse sobre o slide para experimentar. Nenhuma captura de tela é feita.</source>
+      <translation>Mova o mouse sobre o slide para experimentar. Nenhuma captura de tela é feita.</translation>
+    </message>
+    <message>
+      <source>O comando de borracha do passador limpa os traços.</source>
+      <translation>O comando de borracha do passador limpa os traços.</translation>
+    </message>
+    <message>
+      <source>O idioma de destino é definido em Áudio e tradução.</source>
+      <translation>O idioma de destino é definido em Áudio e tradução.</translation>
+    </message>
+    <message>
+      <source>O idioma de origem vem do modelo de voz. Escolha aqui o destino.</source>
+      <translation>O idioma de origem vem do modelo de voz. Escolha aqui o destino.</translation>
+    </message>
+    <message>
+      <source>O reconhecimento usa o modelo de voz selecionado nas configurações.</source>
+      <translation>O reconhecimento usa o modelo de voz selecionado nas configurações.</translation>
+    </message>
+    <message>
+      <source>Orange Dot AI · Seu controle de apresentação</source>
+      <translation>Orange Dot AI · Seu controle de apresentação</translation>
+    </message>
+    <message>
+      <source>PROCESSAMENTO LOCAL</source>
+      <translation>PROCESSAMENTO LOCAL</translation>
+    </message>
+    <message>
+      <source>Pasta compartilhada por todos os perfis · arquivos .txt</source>
+      <translation>Pasta compartilhada por todos os perfis · arquivos .txt</translation>
+    </message>
+    <message>
+      <source>Perfil:</source>
+      <translation>Perfil:</translation>
+    </message>
+    <message>
+      <source>Perfis manuais</source>
+      <translation>Perfis manuais</translation>
+    </message>
+    <message>
+      <source>Pincel</source>
+      <translation>Pincel</translation>
+    </message>
+    <message>
+      <source>Ponteiro e efeitos</source>
+      <translation>Ponteiro e efeitos</translation>
+    </message>
+    <message>
+      <source>Preferências do aplicativo e manutenção em um só lugar.</source>
+      <translation>Preferências do aplicativo e manutenção em um só lugar.</translation>
+    </message>
+    <message>
+      <source>Prepare a transcrição e as legendas do seu próximo encontro.</source>
+      <translation>Prepare a transcrição e as legendas do seu próximo encontro.</translation>
+    </message>
+    <message>
+      <source>Próximo slide</source>
+      <translation>Próximo slide</translation>
+    </message>
+    <message>
+      <source>Reconhecimento e tradução locais após a preparação dos modelos.</source>
+      <translation>Reconhecimento e tradução locais após a preparação dos modelos.</translation>
+    </message>
+    <message>
+      <source>SEGURAR</source>
+      <translation>SEGURAR</translation>
+    </message>
+    <message>
+      <source>Segure para apontar</source>
+      <translation>Segure para apontar</translation>
+    </message>
+    <message>
+      <source>Selecione um botão para ver como ele funciona.</source>
+      <translation>Selecione um botão para ver como ele funciona.</translation>
+    </message>
+    <message>
+      <source>Slide anterior</source>
+      <translation>Slide anterior</translation>
+    </message>
+    <message>
+      <source>Spotlight</source>
+      <translation>Spotlight</translation>
+    </message>
+    <message>
+      <source>Sua voz, em texto</source>
+      <translation>Sua voz, em texto</translation>
+    </message>
+    <message>
+      <source>Tradução</source>
+      <translation>Tradução</translation>
+    </message>
+    <message>
+      <source>Transcrição de voz</source>
+      <translation>Transcrição de voz</translation>
+    </message>
+    <message>
+      <source>Tudo no seu lugar</source>
+      <translation>Tudo no seu lugar</translation>
+    </message>
+    <message>
+      <source>Uma ideia por vez. Mais clareza para acompanhar sua apresentação.</source>
+      <translation>Uma ideia por vez. Mais clareza para acompanhar sua apresentação.</translation>
+    </message>
+    <message>
+      <source>Uma interface mais clara para apresentar.</source>
+      <translation>Uma interface mais clara para apresentar.</translation>
+    </message>
+    <message>
+      <source>Use os botões de microfone e tradução do passador para iniciar ou encerrar cada função.</source>
+      <translation>Use os botões de microfone e tradução do passador para iniciar ou encerrar cada função.</translation>
+    </message>
+    <message>
+      <source>Versão do código: {0}</source>
+      <translation>Versão do código: {0}</translation>
+    </message>
+    <message>
+      <source>Versão e atualizações</source>
+      <translation>Versão e atualizações</translation>
+    </message>
+    <message>
+      <source>Volta ao slide anterior usando o comando nativo do passador.</source>
+      <translation>Volta ao slide anterior usando o comando nativo do passador.</translation>
+    </message>
+    <message>
+      <source>Voltar</source>
+      <translation>Voltar</translation>
+    </message>
+    <message>
+      <source>Área iluminada</source>
+      <translation>Área iluminada</translation>
+    </message>
+    <message>
+      <source>Áudio e tradução</source>
+      <translation>Áudio e tradução</translation>
+    </message>
+    <message>
+      <source>Idioma de origem: {0}</source>
+      <translation>Idioma de origem: {0}</translation>
+    </message>
+    <message>
+      <source>Não definido</source>
+      <translation>Não definido</translation>
+    </message>
+    <message>
+      <source>Overlay Wayland indisponível. Ative a extensão Baseus Presenter no GNOME. Consulte docs/wayland.md; a navegação de slides continua disponível.</source>
+      <translation>Overlay Wayland indisponível. Ative a extensão Baseus Presenter no GNOME. Consulte docs/wayland.md; a navegação de slides continua disponível.</translation>
+    </message>
+    <message>
+      <source>Circular</source>
+      <translation>Circular</translation>
+    </message>
+    <message>
+      <source>Formato da Lupa:</source>
+      <translation>Formato da Lupa:</translation>
+    </message>
+    <message>
+      <source>Quadrada</source>
+      <translation>Quadrada</translation>
+    </message>
   </context>
 </TS>

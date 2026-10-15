@@ -13,7 +13,7 @@ from app.config import Config
 from app.i18n import install_translator
 from app.hardware import HardwareReader
 from app.audio import AudioThread
-from app.overlay import PointerWindow
+from app.overlay_backend import create_overlay
 from app.gui import MainWindow, TrayIcon
 from app.updater import UpdateChecker, start_update_process
 from app.uninstall import register_desktop
@@ -83,6 +83,7 @@ def main():
 
     # 2. Inicialização do Qt e Carregamento de Configurações
     app = QApplication(sys.argv)
+    app.setDesktopFileName("baseus-presenter")
     # O desinstalador solicita encerramento normal antes de remover arquivos.
     signal.signal(signal.SIGTERM, lambda *_: app.quit())
     app.setQuitOnLastWindowClosed(False) # Mantém rodando mesmo se fechar a janela de config
@@ -94,8 +95,10 @@ def main():
     # 3. Instanciando os Módulos (Nenhum deles sabe que os outros existem)
     hardware = HardwareReader(config=config)
     audio = AudioThread(config)
-    overlay = PointerWindow(config)
     settings_gui = MainWindow(config)
+    overlay = create_overlay(config, on_error=settings_gui.show_warning,
+                             on_recovered=settings_gui.clear_warning)
+    app.setWindowIcon(settings_gui.windowIcon())
     tray = TrayIcon(settings_gui)
     updater = UpdateChecker()
 

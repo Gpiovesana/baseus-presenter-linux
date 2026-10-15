@@ -20,7 +20,7 @@ logging.disable(logging.CRITICAL)
 
 try:
     from PyQt5.QtWidgets import QApplication
-    from app import gui as gui_mod
+    from app import models as gui_mod
     QT_AVAILABLE = True
 except Exception:  # pragma: no cover
     QT_AVAILABLE = False

@@ -66,7 +66,9 @@ else:
             output.write(
                 "[Desktop Entry]\nType=Application\nName=Baseus Presenter\n"
                 f"Exec={quote(installation / '.venv/bin/python')} {quote(installation / 'baseus_app.py')}\n"
-                "Icon=input-tablet\nTerminal=false\nCategories=Utility;\nStartupNotify=false\n")
+                f"Icon={installation / 'app/resources/baseus-presenter.png'}\n"
+                "StartupWMClass=baseus_app.py\n"
+                "Terminal=false\nCategories=Utility;\nStartupNotify=false\n")
         os.replace(temporary, entry)
     finally:
         pathlib.Path(temporary).unlink(missing_ok=True)
@@ -125,7 +127,7 @@ curl -sSL -f --connect-timeout 10 --max-time 180 \
 say "📦 Extraindo e validando pacote..." "📦 Extracting and validating package..."
 tar -xzf "$TMP_DIR/release.tar.gz" -C "$TMP_DIR"
 EXTRACTED_DIR="$(find "$TMP_DIR" -mindepth 1 -maxdepth 1 -type d -print -quit)"
-for file in app app/uninstall.py baseus_app.py requirements.txt version updater.sh uninstall.sh; do
+for file in app app/uninstall.py app/system_requirements.py app/system-requirements.json baseus_app.py requirements.txt version updater.sh uninstall.sh; do
     if [[ ! -e "$EXTRACTED_DIR/$file" ]]; then
         say "❌ Release inválida: '$file' não encontrado." "❌ Invalid release: '$file' not found."
         exit 1
@@ -146,9 +148,25 @@ if [[ "${RELEASE_VERSION#v}" != "$VERSION" ]]; then
     exit 1
 fi
 
+# Use the installed validator, not code from the downloaded release.
+# Unknown/legacy records are never inferred from the running app version.
+REQUIREMENTS_INSTALL_DIR="$INSTALL_DIR"
+if [[ -f "$STATE_FILE" && -d "$BACKUP_DIR" ]]; then
+    REQUIREMENTS_INSTALL_DIR="$BACKUP_DIR"
+fi
+if ! python3 "$SCRIPT_DIR/app/system_requirements.py" check \
+    "$EXTRACTED_DIR/app/system-requirements.json" "$REQUIREMENTS_INSTALL_DIR"; then
+    say "❌ Requisitos de sistema não comprovados ou incompatíveis. Reinstale com o instalador atual; a versão em uso foi preservada." "❌ System requirements are unverified or incompatible. Reinstall with the current installer; the active version was preserved."
+    exit 1
+fi
+
 rm -rf -- "$STAGING_DIR"
 mkdir -p "$STAGING_DIR"
 cp -a "$EXTRACTED_DIR/app" "$STAGING_DIR/"
+if [[ -d "$EXTRACTED_DIR/extensions" ]]; then
+    cp -a "$EXTRACTED_DIR/extensions" "$STAGING_DIR/"
+fi
+cp "$REQUIREMENTS_INSTALL_DIR/.system-requirements.json" "$STAGING_DIR/"
 cp "$EXTRACTED_DIR/baseus_app.py" "$EXTRACTED_DIR/requirements.txt" \
    "$EXTRACTED_DIR/version" "$EXTRACTED_DIR/updater.sh" \
    "$EXTRACTED_DIR/uninstall.sh" "$STAGING_DIR/"

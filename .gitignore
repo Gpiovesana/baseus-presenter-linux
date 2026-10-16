@@ -51,3 +51,4 @@ graphify-out/
 *.swp
 .DS_Store
 *~
+docs/

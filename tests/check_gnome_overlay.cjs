@@ -36,6 +36,31 @@ async function main() {
     const monitors = [{x: 0, y: 552, width: 1600, height: 900},
         {x: 1600, y: 0, width: 1920, height: 1080}];
     let cursor = [700, 800];
+    let unfocusHolds = 0;
+    let compositionHolds = 0;
+    const seat = {
+        inhibit_unfocus() {unfocusHolds++;},
+        uninhibit_unfocus() {assert(unfocusHolds > 0); unfocusHolds--;},
+    };
+    const visibilityHandlers = new Map();
+    const tracker = {
+        visible: true,
+        connect(signal, callback) {
+            assert.equal(signal, 'visibility-changed');
+            assert.equal(visibilityHandlers.size, 0);
+            visibilityHandlers.set(1, callback);
+            return 1;
+        },
+        disconnect(id) {assert(visibilityHandlers.delete(id));},
+        get_pointer_visible() {return this.visible;},
+        set_pointer_visible(visible) {
+            if (this.visible === visible)
+                return;
+            this.visible = visible;
+            for (const callback of visibilityHandlers.values())
+                callback();
+        },
+    };
     class Actor {
         constructor(props = {}) {
             Object.assign(this, props); this.children = []; this.visible = true;
@@ -61,13 +86,17 @@ async function main() {
     }
     const context = {
         console, Cairo: {}, St: {Widget: Actor, DrawingArea: Actor, Label: Actor},
-        Clutter: {Clone: Actor, ShaderType: {FRAGMENT_SHADER: 1},
+        Clutter: {get_default_backend: () => ({get_default_seat: () => seat}),
+            Clone: Actor, ShaderType: {FRAGMENT_SHADER: 1},
             ShaderEffect: class {set_shader_source() {return true;} set_uniform_value() {}}},
         Pango: {WrapMode: {WORD_CHAR: 1}, EllipsizeMode: {END: 1}},
         Shell: {util_set_hidden_from_pick(actor, hidden) {actor.hiddenFromPick = hidden;}},
-        Meta: {CursorTracker: {get_for_display: () => ({set_pointer_visible(v) {context.cursorVisible = v;}})}},
+        Meta: {CursorTracker: {get_for_display: () => tracker},
+            disable_unredirect_for_display() {compositionHolds++;},
+            enable_unredirect_for_display() {assert(compositionHolds > 0); compositionHolds--;},
+        },
         global: {get_pointer: () => cursor, window_group: new Actor(), stage: new Actor(),
-            backend: {get_cursor_tracker: () => ({set_pointer_visible(v) {context.cursorVisible = v;}})}},
+            backend: {get_cursor_tracker: () => tracker}},
         Main: {uiGroup: new Actor({width: 3520, height: 1452}), layoutManager: {monitors,
             addTopChrome(a, props) {
                 assert.equal(a.reactive, false);
@@ -83,7 +112,11 @@ async function main() {
     const renderer = new context.Renderer();
     state.active = true;
     renderer.render(state);
-    assert.equal(context.cursorVisible, false); // Cursor hidden when tool is active.
+    assert.equal(tracker.visible, false); // Cursor hidden when tool is active.
+    assert.equal(unfocusHolds, 1);
+    assert.equal(compositionHolds, 1);
+    tracker.set_pointer_visible(true); // Mutter may show it again after input.
+    assert.equal(tracker.visible, false);
     assert.equal(renderer._tools.monitor, monitors[0]);
     assert.equal(renderer._tools.laser.visible, true);
     assert.equal(renderer._tools.lens, null); // Magnifier resources are lazy.
@@ -109,22 +142,31 @@ async function main() {
     cursor = [1800, 500]; renderer.render(state);
     assert.equal(renderer._strokes.length, 3); // Never join across monitors.
     assert.equal(renderer._tools.monitor, monitors[1]);
+    assert.equal(unfocusHolds, 1); // Tool/monitor changes must not acquire again.
+    assert.equal(compositionHolds, 1);
     state.pen = false; state.active = false;
     renderer.render(state);
-    assert.equal(context.cursorVisible, true); // Cursor visible when tools are idle.
+    assert.equal(tracker.visible, true); // Cursor visible when tools are idle.
+    assert.equal(unfocusHolds, 0);
+    assert.equal(visibilityHandlers.size, 0);
+    assert.equal(compositionHolds, 1); // Retained strokes still need composition.
     assert.equal(renderer._tools.root.visible, false);
     assert.equal(renderer._tools.lensRoot.visible, false);
     assert.equal(oldStroke.actor.destroyed, undefined);
     state.clear_serial++; renderer.render(state);
     assert.equal(renderer._strokes.length, 0);
     assert.equal(oldStroke.actor.destroyed, true);
+    assert.equal(compositionHolds, 0);
     state.black = true; renderer.render(state);
-    assert.equal(context.cursorVisible, false); // Cursor hidden during black screen.
+    assert.equal(tracker.visible, false); // Cursor hidden during black screen.
     assert.equal(renderer._tools.black.visible, true);
     state.active = true; state.mode = 'LUPA'; renderer.render(state);
     assert.equal(renderer._tools.lens.visible, false);
     renderer.reset(); renderer.reset();
-    assert.equal(context.cursorVisible, true); // Cursor restored on reset.
+    assert.equal(tracker.visible, true); // Cursor restored on reset.
+    assert.equal(unfocusHolds, 0);
+    assert.equal(compositionHolds, 0);
+    assert.equal(visibilityHandlers.size, 0);
     assert.equal(attached.size, 0);
     assert.equal(context.global.stage.children.length, 0);
 
@@ -184,6 +226,10 @@ async function main() {
     assert.equal(server._session.state, null);
     assert.equal(attached.size, 0);
     server.disable(); server.disable();
-    console.log('PASS: protocol/Unicode, async gesture boundary, effects, monitor switch, lease/disconnect/release, cleanup.');
+    assert.equal(tracker.visible, true);
+    assert.equal(unfocusHolds, 0);
+    assert.equal(compositionHolds, 0);
+    assert.equal(visibilityHandlers.size, 0);
+    console.log('PASS: protocol/Unicode, async gesture boundary, effects, monitor switch, lease/disconnect/release, cursor/composition cleanup.');
 }
 main().catch(error => {console.error(error); process.exitCode = 1;});

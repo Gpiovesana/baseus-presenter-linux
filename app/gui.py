@@ -5,6 +5,7 @@ import re
 import copy
 import shutil
 from pathlib import Path
+from PyQt5 import sip
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QSlider, QComboBox, QPushButton, QSystemTrayIcon, QMenu,
                              qApp, QColorDialog, QFileDialog, QInputDialog, QMessageBox, QCheckBox, QProgressDialog, QStyle)
@@ -534,6 +535,9 @@ class MainWindow(QMainWindow):
             language = self._ask_model_language(model.get('label', path), model.get('language'))
         finally:
             self._model_language_prompt_open = False
+        # The modal dialog runs an event loop that may destroy its parent.
+        if sip.isdeleted(self):
+            return
         if language:
             models.set_model_language(self.config, path, language)
             self._save_now()

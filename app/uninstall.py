@@ -75,7 +75,8 @@ def register_desktop(directory):
         "Comment=Remove the application (confirmation required)\n"
         "Comment[pt]=Remover o aplicativo (pede confirmação antes de continuar)\n"
         f"Exec=/bin/bash {desktop_quote(wrapper)}\n"
-        "Icon=edit-delete\nTerminal=true\nCategories=Utility;\nStartupNotify=false\n",
+        f"Icon={target / 'app/resources/baseus-presenter-uninstall.png'}\n"
+        "Terminal=true\nCategories=Utility;\nStartupNotify=false\n",
         encoding="utf-8",
     )
     return launcher

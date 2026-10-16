@@ -23,8 +23,7 @@ Um software open-source não-oficial que desbloqueia e expande todas as funciona
 > 🐧 **Compatibilidade:** Testado no Zorin OS. Projetado para distribuições Linux baseadas em Debian/Ubuntu. Testes da comunidade em outras distribuições são bem-vindos.
 
 No checkout de desenvolvimento há integração **experimental com GNOME 46 em
-Wayland**, por extensão local. Preparação, limites e testes em
-[docs/wayland.md](docs/wayland.md). X11 mantém o overlay existente.
+Wayland**, por extensão local. X11 mantém o overlay existente.
 
 No GNOME 46 Wayland, ao abrir o Baseus a extensão é preparada e habilitada no
 usuário. Se o aplicativo pedir, salve o trabalho e saia/entre na sessão para

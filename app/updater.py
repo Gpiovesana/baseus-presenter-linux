@@ -1,5 +1,8 @@
 from .i18n import tr, current_language
 import json
+import math
+import time
+from email.utils import parsedate_to_datetime
 import os
 import re
 import subprocess
@@ -49,27 +52,120 @@ def is_newer(current, latest):
     return normalize_version(latest) > normalize_version(current)
 
 
-def get_latest_release():
-    """Consulta a última Release estável do GitHub."""
-    request = urllib.request.Request(
-        API_URL,
-        headers={"User-Agent": "Baseus-Presenter-Updater"},
-    )
+class UpdateDeferred(Exception):
+    def __init__(self, seconds):
+        super().__init__(tr('O servidor pediu uma pausa. Tente novamente em {0} segundos.', max(1, math.ceil(seconds))))
 
-    with urllib.request.urlopen(request, timeout=10) as response:
-        data = json.loads(response.read().decode("utf-8"))
 
-    if data.get("draft") or data.get("prerelease"):
+def update_cache_path():
+    root = Path(os.environ.get('XDG_CACHE_HOME') or Path.home() / '.cache')
+    return root / 'baseus_presenter/update-check.json'
+
+
+def _release_result(data):
+    if not isinstance(data, dict):
+        raise ValueError('Invalid release response')
+    if data.get('draft') or data.get('prerelease'):
         return None
+    tag, url = data.get('tag_name'), data.get('html_url')
+    if (not isinstance(tag, str) or not re.fullmatch(r'v?\d+(?:\.\d+){0,2}', tag)
+            or not isinstance(url, str) or not url.startswith('https://')):
+        raise ValueError('Invalid release tag or URL')
+    return tag, url
 
-    tag = data.get("tag_name")
-    html_url = data.get("html_url")
 
-    if not tag:
-        return None
+def _read_update_cache(path):
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+        if not isinstance(data, dict) or data.get('schema') != 1 or data.get('api') != API_URL:
+            return {}
+        for key in ('checked_at', 'retry_until'):
+            value = data.get(key, 0)
+            if type(value) not in (int, float) or value < 0 or value > 2**50:
+                return {}
+            if type(value) is float and not math.isfinite(value):
+                return {}
+        if 'checked_at' in data and 'result' not in data:
+            return {}
+        result = data.get('result')
+        if result is not None:
+            if not isinstance(result, list) or len(result) != 2:
+                return {}
+            _release_result({'tag_name': result[0], 'html_url': result[1]})
+        return data
+    except (OSError, ValueError, TypeError):
+        return {}
 
-    return tag, html_url
 
+def _save_update_cache(path, data):
+    temporary = None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix='.update-check-', dir=path.parent)
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            json.dump(dict(data, schema=1, api=API_URL), stream)
+        os.replace(temporary, path)
+    except OSError as exc:
+        log.warning('Não foi possível persistir o cache de atualização: %s', exc)
+    finally:
+        if temporary is not None:
+            try:
+                Path(temporary).unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def _retry_deadline(headers, now, status=None):
+    deadlines = []
+    retry = headers.get('Retry-After')
+    if retry:
+        try:
+            seconds = float(retry)
+            if math.isfinite(seconds) and seconds >= 0:
+                deadlines.append(now + seconds)
+        except ValueError:
+            try:
+                deadlines.append(parsedate_to_datetime(retry).timestamp())
+            except (ValueError, TypeError, OverflowError):
+                pass
+    limited = headers.get('X-RateLimit-Remaining') == '0'
+    if limited:
+        try:
+            reset = float(headers.get('X-RateLimit-Reset', ''))
+            if math.isfinite(reset):
+                deadlines.append(reset)
+        except ValueError:
+            pass
+    # 403 without rate-limit evidence is an authorization/other HTTP error.
+    future = [deadline for deadline in deadlines if deadline > now]
+    return max(future, default=now + 60 if status == 429 or limited else 0)
+
+
+def get_latest_release(is_manual=False):
+    """Persistent six-hour cache; manual requests still honor server backoff."""
+    path = update_cache_path()
+    cache = _read_update_cache(path)
+    now = time.time()
+    if cache.get('retry_until', 0) > now:
+        raise UpdateDeferred(cache['retry_until'] - now)
+    checked_at = cache.get('checked_at')
+    if (not is_manual and checked_at is not None
+            and 0 <= now - checked_at < CHECK_INTERVAL_MS / 1000):
+        result = cache.get('result')
+        return tuple(result) if result is not None else None
+    request = urllib.request.Request(API_URL, headers={'User-Agent': 'Baseus-Presenter-Updater'})
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            result = _release_result(json.loads(response.read().decode('utf-8')))
+            deadline = _retry_deadline(response.headers, time.time())
+    except urllib.error.HTTPError as exc:
+        deadline = _retry_deadline(exc.headers or {}, time.time(), exc.code)
+        if deadline:
+            cache['retry_until'] = deadline
+            _save_update_cache(path, cache)
+        raise
+    _save_update_cache(path, {'checked_at': time.time(), 'result': result, 'retry_until': deadline})
+    return result
 
 class UpdateCheckThread(QThread):
     update_available = pyqtSignal(str, str, bool)
@@ -83,7 +179,7 @@ class UpdateCheckThread(QThread):
 
     def run(self):
         try:
-            result = get_latest_release()
+            result = get_latest_release(is_manual=self.is_manual)
 
             if result is None:
                 self.no_update.emit(self.is_manual)
@@ -98,6 +194,9 @@ class UpdateCheckThread(QThread):
                 log.debug(f"Baseus Presenter já está atualizado ({self.current_version}).")
                 self.no_update.emit(self.is_manual)
 
+        except UpdateDeferred as exc:
+            log.info('Consulta de atualização adiada: %s', exc)
+            self.failed.emit(str(exc), self.is_manual)
         except urllib.error.URLError as exc:
             log.warning(f"Falha ao verificar atualizações: {exc}")
             self.failed.emit(str(exc), self.is_manual)

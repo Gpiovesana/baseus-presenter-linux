@@ -99,6 +99,7 @@ class TestUninstall(unittest.TestCase):
         self.assertIn("Exec=/bin/bash", content)
         self.assertIn("Baseus Presenter", content)
         self.assertIn("%%", content)
+        self.assertIn(f"Icon={self.install / 'app/resources/baseus-presenter-uninstall.png'}\n", content)
 
     def test_register_materializes_missing_wrapper(self):
         wrapper = self.install / "uninstall.sh"

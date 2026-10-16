@@ -109,7 +109,7 @@ class TestModelLanguage(GuiTestCase):
             if not state['fresh']:
                 return []
             return [SimpleNamespace(from_code='de', to_code='pt', to_name='Portuguese')]
-        with mock.patch('app.gui.argostranslate') as argos:
+        with mock.patch('app.models.argostranslate') as argos:
             argos.package.update_package_index.side_effect = refresh
             argos.package.get_available_packages.side_effect = packages
             thread.run()

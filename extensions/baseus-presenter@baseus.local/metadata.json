@@ -1,0 +1,7 @@
+{
+  "uuid": "baseus-presenter@baseus.local",
+  "name": "Baseus Presenter — Wayland (experimental)",
+  "description": "Overlay controlado pelo Baseus Presenter. Requer GNOME 46.",
+  "shell-version": ["46"],
+  "version": 3
+}

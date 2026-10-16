@@ -660,5 +660,337 @@ Download it? (About 30 MB)</translation>
       <source>{0} (indisponível)</source>
       <translation>{0} (unavailable)</translation>
     </message>
+    <message>
+      <source>O servidor pediu uma pausa. Tente novamente em {0} segundos.</source>
+      <translation>The server requested a pause. Try again in {0} seconds.</translation>
+    </message>
+    <message>
+      <source>01  /  CLAREZA NA APRESENTAÇÃO</source>
+      <translation>01  /  PRESENT WITH CLARITY</translation>
+    </message>
+    <message>
+      <source>A inicialização automática é escolhida na instalação ou na confirmação de uma atualização.</source>
+      <translation>Choose automatic startup during installation or when confirming an update.</translation>
+    </message>
+    <message>
+      <source>A navegação continua sob controle do aplicativo de apresentação.</source>
+      <translation>Navigation remains controlled by the presentation application.</translation>
+    </message>
+    <message>
+      <source>APAGAR</source>
+      <translation>CLEAR</translation>
+    </message>
+    <message>
+      <source>APRESENTAÇÃO DE EXEMPLO</source>
+      <translation>SAMPLE PRESENTATION</translation>
+    </message>
+    <message>
+      <source>Ajustar ponteiro e efeitos</source>
+      <translation>Adjust pointer and effects</translation>
+    </message>
+    <message>
+      <source>Ajustes do perfil selecionado.</source>
+      <translation>Settings for the selected profile.</translation>
+    </message>
+    <message>
+      <source>Alterna a tela preta para trazer a atenção de volta a você.</source>
+      <translation>Toggle the black screen to bring attention back to you.</translation>
+    </message>
+    <message>
+      <source>Alterna entre laser, lupa e spotlight.</source>
+      <translation>Switch between laser, magnifier and spotlight.</translation>
+    </message>
+    <message>
+      <source>Aplicativo</source>
+      <translation>Application</translation>
+    </message>
+    <message>
+      <source>Arquivos de transcrição</source>
+      <translation>Transcription files</translation>
+    </message>
+    <message>
+      <source>Ativa a ferramenta visual selecionada enquanto o botão estiver pressionado.</source>
+      <translation>Activate the selected visual tool while holding the button.</translation>
+    </message>
+    <message>
+      <source>Ativa o desenho sobre a apresentação.</source>
+      <translation>Draw over the presentation.</translation>
+    </message>
+    <message>
+      <source>Ativa ou desativa as legendas traduzidas.</source>
+      <translation>Enable or disable translated subtitles.</translation>
+    </message>
+    <message>
+      <source>Avança a apresentação usando o comando nativo do passador.</source>
+      <translation>Advance the presentation using the presenter's native command.</translation>
+    </message>
+    <message>
+      <source>Avançar</source>
+      <translation>Next</translation>
+    </message>
+    <message>
+      <source>Baseus Presenter — Configurações</source>
+      <translation>Baseus Presenter — Settings</translation>
+    </message>
+    <message>
+      <source>Botões</source>
+      <translation>Buttons</translation>
+    </message>
+    <message>
+      <source>CLIQUE</source>
+      <translation>CLICK</translation>
+    </message>
+    <message>
+      <source>CLIQUE DUPLO</source>
+      <translation>DOUBLE CLICK</translation>
+    </message>
+    <message>
+      <source>Confira novas versões e a opção de inicialização automática.</source>
+      <translation>Check for new versions and automatic startup options.</translation>
+    </message>
+    <message>
+      <source>Conheça seu passador</source>
+      <translation>Meet your presenter</translation>
+    </message>
+    <message>
+      <source>DICA</source>
+      <translation>TIP</translation>
+    </message>
+    <message>
+      <source>DISPOSITIVO</source>
+      <translation>DEVICE</translation>
+    </message>
+    <message>
+      <source>Desenhar e apagar</source>
+      <translation>Draw and clear</translation>
+    </message>
+    <message>
+      <source>Disponível no aplicativo instalado. Requer confirmação explícita.</source>
+      <translation>Available in the installed application. Requires explicit confirmation.</translation>
+    </message>
+    <message>
+      <source>Dê destaque ao que importa.</source>
+      <translation>Highlight what matters.</translation>
+    </message>
+    <message>
+      <source>Entrada e reconhecimento</source>
+      <translation>Input and recognition</translation>
+    </message>
+    <message>
+      <source>Escolha uma ferramenta e veja os ajustes no slide de exemplo.</source>
+      <translation>Choose a tool and preview its settings on the sample slide.</translation>
+    </message>
+    <message>
+      <source>Escurecimento</source>
+      <translation>Dimming</translation>
+    </message>
+    <message>
+      <source>Esta escolha acompanha o perfil selecionado no topo.</source>
+      <translation>This setting follows the profile selected above.</translation>
+    </message>
+    <message>
+      <source>Estas escolhas acompanham o perfil selecionado.</source>
+      <translation>These settings follow the selected profile.</translation>
+    </message>
+    <message>
+      <source>Estas preferências valem para todos os perfis.</source>
+      <translation>These preferences apply to every profile.</translation>
+    </message>
+    <message>
+      <source>IDIOMA</source>
+      <translation>LANGUAGE</translation>
+    </message>
+    <message>
+      <source>Idioma da interface e ação ao fechar a janela são escolhas globais. Efeitos, áudio, tradução e exibição de legendas acompanham cada perfil.</source>
+      <translation>Interface language and window closing behavior are global preferences. Effects, audio, translation and subtitles follow each profile.</translation>
+    </message>
+    <message>
+      <source>Ilustração esquemática · Funções atuais, sem remapeamento de botões.</source>
+      <translation>Schematic illustration · Current functions, without button remapping.</translation>
+    </message>
+    <message>
+      <source>Inicia ou encerra a gravação da transcrição.</source>
+      <translation>Start or stop recording the transcription.</translation>
+    </message>
+    <message>
+      <source>Laser digital</source>
+      <translation>Digital laser</translation>
+    </message>
+    <message>
+      <source>Legendas durante a gravação</source>
+      <translation>Subtitles while recording</translation>
+    </message>
+    <message>
+      <source>Legendas traduzidas</source>
+      <translation>Translated subtitles</translation>
+    </message>
+    <message>
+      <source>Lupa</source>
+      <translation>Magnifier</translation>
+    </message>
+    <message>
+      <source>Microfone</source>
+      <translation>Microphone</translation>
+    </message>
+    <message>
+      <source>Mova o mouse sobre o slide para experimentar. Nenhuma captura de tela é feita.</source>
+      <translation>Move the mouse over the slide to try it. No screen capture is performed.</translation>
+    </message>
+    <message>
+      <source>O comando de borracha do passador limpa os traços.</source>
+      <translation>The presenter's eraser command clears the strokes.</translation>
+    </message>
+    <message>
+      <source>O idioma de destino é definido em Áudio e tradução.</source>
+      <translation>Choose the target language in Audio and translation.</translation>
+    </message>
+    <message>
+      <source>O idioma de origem vem do modelo de voz. Escolha aqui o destino.</source>
+      <translation>The speech model determines the source language. Choose the target here.</translation>
+    </message>
+    <message>
+      <source>O reconhecimento usa o modelo de voz selecionado nas configurações.</source>
+      <translation>Recognition uses the speech model selected in settings.</translation>
+    </message>
+    <message>
+      <source>Orange Dot AI · Seu controle de apresentação</source>
+      <translation>Orange Dot AI · Your presentation controller</translation>
+    </message>
+    <message>
+      <source>PROCESSAMENTO LOCAL</source>
+      <translation>LOCAL PROCESSING</translation>
+    </message>
+    <message>
+      <source>Pasta compartilhada por todos os perfis · arquivos .txt</source>
+      <translation>Folder shared by all profiles · .txt files</translation>
+    </message>
+    <message>
+      <source>Perfil:</source>
+      <translation>Profile:</translation>
+    </message>
+    <message>
+      <source>Perfis manuais</source>
+      <translation>Manual profiles</translation>
+    </message>
+    <message>
+      <source>Pincel</source>
+      <translation>Pen</translation>
+    </message>
+    <message>
+      <source>Ponteiro e efeitos</source>
+      <translation>Pointer and effects</translation>
+    </message>
+    <message>
+      <source>Preferências do aplicativo e manutenção em um só lugar.</source>
+      <translation>Application preferences and maintenance in one place.</translation>
+    </message>
+    <message>
+      <source>Prepare a transcrição e as legendas do seu próximo encontro.</source>
+      <translation>Set up transcription and subtitles for your next session.</translation>
+    </message>
+    <message>
+      <source>Próximo slide</source>
+      <translation>Next slide</translation>
+    </message>
+    <message>
+      <source>Reconhecimento e tradução locais após a preparação dos modelos.</source>
+      <translation>Local recognition and translation once models are ready.</translation>
+    </message>
+    <message>
+      <source>SEGURAR</source>
+      <translation>HOLD</translation>
+    </message>
+    <message>
+      <source>Segure para apontar</source>
+      <translation>Hold to point</translation>
+    </message>
+    <message>
+      <source>Selecione um botão para ver como ele funciona.</source>
+      <translation>Select a button to see how it works.</translation>
+    </message>
+    <message>
+      <source>Slide anterior</source>
+      <translation>Previous slide</translation>
+    </message>
+    <message>
+      <source>Spotlight</source>
+      <translation>Spotlight</translation>
+    </message>
+    <message>
+      <source>Sua voz, em texto</source>
+      <translation>Your voice, in text</translation>
+    </message>
+    <message>
+      <source>Tradução</source>
+      <translation>Translation</translation>
+    </message>
+    <message>
+      <source>Transcrição de voz</source>
+      <translation>Voice transcription</translation>
+    </message>
+    <message>
+      <source>Tudo no seu lugar</source>
+      <translation>Everything in its place</translation>
+    </message>
+    <message>
+      <source>Uma ideia por vez. Mais clareza para acompanhar sua apresentação.</source>
+      <translation>One idea at a time. Make your presentation easier to follow.</translation>
+    </message>
+    <message>
+      <source>Uma interface mais clara para apresentar.</source>
+      <translation>A clearer interface for presenting.</translation>
+    </message>
+    <message>
+      <source>Use os botões de microfone e tradução do passador para iniciar ou encerrar cada função.</source>
+      <translation>Use the presenter's microphone and translation buttons to start or stop each function.</translation>
+    </message>
+    <message>
+      <source>Versão do código: {0}</source>
+      <translation>Code version: {0}</translation>
+    </message>
+    <message>
+      <source>Versão e atualizações</source>
+      <translation>Version and updates</translation>
+    </message>
+    <message>
+      <source>Volta ao slide anterior usando o comando nativo do passador.</source>
+      <translation>Return to the previous slide using the presenter's native command.</translation>
+    </message>
+    <message>
+      <source>Voltar</source>
+      <translation>Back</translation>
+    </message>
+    <message>
+      <source>Área iluminada</source>
+      <translation>Highlighted area</translation>
+    </message>
+    <message>
+      <source>Áudio e tradução</source>
+      <translation>Audio and translation</translation>
+    </message>
+    <message>
+      <source>Idioma de origem: {0}</source>
+      <translation>Source language: {0}</translation>
+    </message>
+    <message>
+      <source>Não definido</source>
+      <translation>Not set</translation>
+    </message>
+    <message>
+      <source>Overlay Wayland indisponível. Ative a extensão Baseus Presenter no GNOME. Consulte docs/wayland.md; a navegação de slides continua disponível.</source>
+      <translation>Wayland overlay unavailable. Enable the Baseus Presenter extension in GNOME. See docs/wayland.md; slide navigation remains available.</translation>
+    </message>
+    <message>
+      <source>Circular</source>
+      <translation>Circular</translation>
+    </message>
+    <message>
+      <source>Formato da Lupa:</source>
+      <translation>Magnifier Shape:</translation>
+    </message>
+    <message>
+      <source>Quadrada</source>
+      <translation>Square</translation>
+    </message>
   </context>
 </TS>

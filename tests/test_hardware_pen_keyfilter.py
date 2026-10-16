@@ -39,7 +39,7 @@ def apply_pen_filter(reader, is_pen_drawing, ev):
     encaminhado ao dispositivo virtual.
     """
     if ev.type == hw.e.EV_KEY:
-        if ev.code == hw.e.KEY_B:
+        if ev.code in (hw.e.KEY_B, hw.e.KEY_E):
             return False
         if is_pen_drawing:
             if ev.value == 0 and ev.code in reader._forwarded_pressed:
@@ -57,6 +57,14 @@ def apply_pen_filter(reader, is_pen_drawing, ev):
 class TestFiltroDeTecladoDurantePincel(unittest.TestCase):
     def setUp(self):
         self.reader = hw.HardwareReader()
+
+    def test_tecla_e_bloqueada_mesmo_fora_do_pincel(self):
+        """O botão de borracha do passador emite 'E' (atalho do PowerPoint) via evdev
+        após o fim do traço. Deve ser bloqueado para não vazar ao sistema."""
+        ev_press = FakeEvent(hw.e.EV_KEY, hw.e.KEY_E, 1)
+        ev_release = FakeEvent(hw.e.EV_KEY, hw.e.KEY_E, 0)
+        self.assertFalse(apply_pen_filter(self.reader, False, ev_press))
+        self.assertFalse(apply_pen_filter(self.reader, False, ev_release))
 
     def test_ctrl_p_nao_e_encaminhado_durante_o_pincel(self):
         """Reproduz o Ctrl+P que abria a paleta de comandos do VS Code."""

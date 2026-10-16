@@ -7,6 +7,7 @@ from PyQt5.QtGui import (QPainter, QColor, QPen, QPainterPath, QRegion, QFont,
 
 from .logger import get_logger
 from .config import Config
+from .x11_cursor import X11Cursor
 
 log = get_logger(__name__)
 
@@ -40,6 +41,7 @@ class PointerWindow(QMainWindow):
         self.setWindowFlags(flags)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.tela_preta_ativa = False
+        self._native_cursor = X11Cursor() if QApplication.platformName() == "xcb" else None
 
         # O teletransporte inteligente para múltiplos monitores (Criado na v1.1)
         self.current_screen = QApplication.screenAt(self.cursor().pos())
@@ -95,6 +97,8 @@ class PointerWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Para o timer ao fechar para evitar crash por acesso a objeto deletado"""
+        if self._native_cursor is not None:
+            self._native_cursor.close()
         self.timer.stop()
         self.subtitle_timer.stop()
         super().closeEvent(event)
@@ -124,6 +128,7 @@ class PointerWindow(QMainWindow):
             self._invalidate_strokes_cache()
             if resume_pen:
                 self.is_pen_drawing = True
+                self._sync_native_cursor()
                 self.current_stroke_screen = self._screen_key()
             if hasattr(self, 'screen_pixmap') and self.is_drawing and self.modes[self.mode_index] == "LUPA":
                 self.screen_pixmap = screen.grabWindow(0)
@@ -132,10 +137,16 @@ class PointerWindow(QMainWindow):
 
     
     
+    def _sync_native_cursor(self):
+        if self._native_cursor is not None:
+            self._native_cursor.set_hidden(
+                self.is_drawing or self.is_pen_drawing or self.tela_preta_ativa)
+
     def set_active(self, active):
         if active:
             self._sync_screen()
         self.is_drawing = active
+        self._sync_native_cursor()
         if active and self.modes[self.mode_index] == "LUPA":
             self.screen_pixmap = self.current_screen.grabWindow(0)
 
@@ -152,6 +163,7 @@ class PointerWindow(QMainWindow):
     def toggle_black_screen(self):
         """Alterna entre mostrar a tela normal e uma tela totalmente preta"""
         self.tela_preta_ativa = not getattr(self, "tela_preta_ativa", False)
+        self._sync_native_cursor()
         log.info(f"Tela Preta: {'LIGADA' if self.tela_preta_ativa else 'DESLIGADA'}")
         
         if self.tela_preta_ativa:
@@ -176,6 +188,7 @@ class PointerWindow(QMainWindow):
             self.current_stroke_screen = self._screen_key()
 
         self.is_pen_drawing = active
+        self._sync_native_cursor()
 
         if not active:
             if self.current_stroke:

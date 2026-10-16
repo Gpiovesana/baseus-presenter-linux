@@ -1,5 +1,6 @@
 """Exercita a transação real com download e ambiente Python locais simulados."""
 import os
+import json
 import shutil
 import subprocess
 import sys
@@ -80,8 +81,15 @@ if len(sys.argv) == 3 and sys.argv[1] == '--register-desktop':
 """)
         (self.release / "version").write_text("2.0.0\n")
         (self.release / "requirements.txt").write_text("")
+        shutil.copytree(ROOT / 'extensions', self.release / 'extensions')
+        for module in ('gnome_extension.py', 'x11_cursor.py', 'logger.py'):
+            shutil.copyfile(ROOT / 'app' / module, self.release / 'app' / module)
+
         (self.release / "updater.sh").write_text("#!/bin/bash\n")
         (self.release / "uninstall.sh").write_text("#!/bin/bash\n")
+        shutil.copyfile(ROOT / 'app/system_requirements.py', self.release / 'app/system_requirements.py')
+        (self.release / 'app/system-requirements.json').write_text('{"schema":1,"revision":1}')
+        (self.install / '.system-requirements.json').write_text('{"schema":1,"revision":1}')
         self.payload = '''import os, pathlib, time
 root = pathlib.Path(os.environ['TEST_UPDATE_ROOT'])
 if os.environ.get('FAIL_STARTUP'):
@@ -97,15 +105,67 @@ time.sleep(1)
         path.write_text(text)
         path.chmod(0o755)
 
-    def run_update(self, pid="99999999", choice="keep"):
+    def run_update(self, pid="99999999", choice="keep", script=None):
         (self.release / "baseus_app.py").write_text(self.payload)
         archive = self.root / "release.tar.gz"
         with tarfile.open(archive, "w:gz") as output:
             output.add(self.release, arcname="release")
         self.env["FAKE_RELEASE"] = str(archive)
         return subprocess.run(
-            ["bash", str(ROOT / "updater.sh"), "2.0.0", pid, str(self.status), choice],
+            ["bash", str(script or ROOT / "updater.sh"), "2.0.0", pid, str(self.status), choice],
             env=self.env, cwd=self.install, text=True, capture_output=True, timeout=15)
+
+    def test_old_updater_does_not_create_system_receipt(self):
+        # The preparatory release keeps revision 1. An already shipped updater
+        # cannot acquire the new preflight retroactively, even with new payload.
+        legacy = self.root / 'legacy-updater.sh'
+        legacy.write_bytes((ROOT / 'tests/fixtures/updater-before-system-requirements.sh').read_bytes())
+        (self.install / '.system-requirements.json').unlink()
+        result = self.run_update(script=legacy)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((self.install / '.system-requirements.json').exists())
+
+    def test_interrupted_recovery_checks_the_backup_receipt(self):
+        backup = Path(str(self.install) + '_backup')
+        shutil.copytree(self.install, backup)
+        (backup / '.system-requirements.json').write_text('{"schema":1,"revision":2}')
+        self.state.write_text('pending')
+        result = self.run_update()
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.status.read_text().strip(), 'ERROR')
+        self.assertEqual((self.install / 'version').read_text(), '1.0.0\n')
+        self.assertTrue(backup.exists())
+
+    def test_missing_release_validator_preserves_installation(self):
+        (self.release / 'app/system_requirements.py').unlink()
+        result = self.run_update()
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((self.install / 'version').read_text(), '1.0.0\n')
+        self.assertEqual(self.status.read_text().strip(), 'ERROR')
+
+    def test_system_contract_blocks_before_ready(self):
+        for state in (None, '{bad', '{"schema":1,"revision":2}'):
+            with self.subTest(state=state):
+                path = self.install / '.system-requirements.json'
+                path.unlink(missing_ok=True)
+                if state is not None:
+                    path.write_text(state)
+                result = self.run_update()
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual((self.install / 'version').read_text(), '1.0.0\n')
+                self.assertEqual(self.status.read_text().strip(), 'ERROR')
+                self.assertIn('reinstal', result.stdout.lower())
+
+    def test_system_record_survives_success_and_rollback(self):
+        original = (self.install / '.system-requirements.json').read_bytes()
+        self.env['FAIL_STARTUP'] = '1'
+        result = self.run_update()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.install / '.system-requirements.json').read_bytes(), original)
+        del self.env['FAIL_STARTUP']
+        result = self.run_update()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((self.install / '.system-requirements.json').read_bytes(), original)
 
     def test_update_changes_autostart_only_on_success(self):
         entry = self.root / "config/autostart/baseus-presenter.desktop"
@@ -276,3 +336,22 @@ exec "{real_mv}" "$@"
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual((self.install / "version").read_text(), "1.0.0\n")
         self.assertTrue(backup.exists())
+
+    def test_release_payload_prepares_extension_outside_dev_checkout(self):
+        result = self.run_update()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        code = """from pathlib import Path
+from app.gnome_extension import FILES, UUID, install_extension, extension_destination
+import app.gnome_extension as module
+root = Path.cwd()
+assert Path(module.__file__).resolve().parent.parent == root
+source = root / 'extensions' / UUID
+destination = extension_destination()
+install_extension(source, destination)
+for name in FILES:
+    assert (source / name).read_bytes() == (destination / name).read_bytes()
+import app.x11_cursor
+"""
+        check = subprocess.run([sys.executable, '-c', code], cwd=self.install,
+                               env=self.env, capture_output=True, text=True, timeout=5)
+        self.assertEqual(check.returncode, 0, check.stdout + check.stderr)

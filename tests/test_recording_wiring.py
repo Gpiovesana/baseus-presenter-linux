@@ -62,7 +62,7 @@ class TestRecordingWiring(unittest.TestCase):
                  mock.patch.object(baseus_app, "install_translator"), \
                  mock.patch.object(baseus_app, "HardwareReader", return_value=hardware), \
                  mock.patch.object(baseus_app, "AudioThread", return_value=audio), \
-                 mock.patch.object(baseus_app, "PointerWindow", return_value=overlay), \
+                 mock.patch.object(baseus_app, "create_overlay", return_value=overlay), \
                  mock.patch.object(baseus_app, "MainWindow") as gui_type, \
                  mock.patch.object(baseus_app, "TrayIcon"), \
                  mock.patch.object(baseus_app, "UpdateChecker"), \

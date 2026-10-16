@@ -52,3 +52,7 @@ graphify-out/
 .DS_Store
 *~
 docs/
+
+# Anotações internas de desenvolvimento
+docs/
+status.md

@@ -193,12 +193,13 @@ def main():
     # Limpeza ao sair
     def cleanup():
         log.info("Encerrando threads...")
+        # Restore cursor and release overlays before waiting for workers.
+        overlay.close()
         settings_gui.flush_pending_save()
         updater.stop()
         settings_gui.stop_threads()
         hardware.stop()
         audio.stop()
-        overlay.close()
         # Mantém o inode: apagar o arquivo abre uma corrida entre instâncias.
         lock_fp.close()
 

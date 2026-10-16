@@ -93,5 +93,29 @@ class TestWaylandOverlay(unittest.TestCase):
                 mock.patch('app.overlay.PointerWindow') as x11:
             self.assertIs(create_overlay(self.config), x11.return_value)
         with mock.patch.dict(os.environ, {'XDG_SESSION_TYPE': 'wayland'}), \
-                mock.patch('app.overlay_wayland.WaylandOverlay') as wayland:
+                mock.patch('app.overlay_wayland.WaylandOverlay') as wayland, \
+                mock.patch('app.gnome_extension.prepare_wayland_extension', return_value=None):
             self.assertIs(create_overlay(self.config), wayland.return_value)
+
+    def test_preparation_reload_warning_remains_even_with_old_service_connected(self):
+        w = self.overlay
+        w.preparation_warning = 'Saia e entre na sessão.'
+        w.on_error = mock.Mock()
+        w.on_recovered = mock.Mock()
+        w._set_available(True)
+        w.on_error.assert_called_once_with(w.preparation_warning)
+        w.on_recovered.assert_not_called()
+
+    def test_close_with_active_effect_sends_release_once_and_stops_timers(self):
+        w = self.overlay
+        w.set_active(True)
+        w.set_pen_active(True)
+        w.show()
+        with mock.patch('app.overlay_wayland.QDBusConnection.sessionBus') as bus:
+            w.close()
+            w.close()
+        bus.return_value.asyncCall.assert_called_once()
+        message = bus.return_value.asyncCall.call_args.args[0]
+        self.assertEqual(message.member(), 'Release')
+        self.assertFalse(w.heartbeat.isActive())
+        self.assertFalse(w.subtitle_timer.isActive())

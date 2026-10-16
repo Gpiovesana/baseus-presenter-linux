@@ -26,6 +26,25 @@ No checkout de desenvolvimento há integração **experimental com GNOME 46 em
 Wayland**, por extensão local. Preparação, limites e testes em
 [docs/wayland.md](docs/wayland.md). X11 mantém o overlay existente.
 
+### Testar a dev em outro computador
+
+Para testar estas alterações antes de uma release, use um checkout da branch
+`dev` ou o pacote de teste fornecido. Dentro da pasta, execute:
+
+```bash
+bash install.sh --from-checkout
+```
+
+Essa opção instala os arquivos locais em `~/BaseusPresenter`, com as mesmas
+etapas do instalador normal, sem consultar a última release. Não execute com
+`sudo`; o script pedirá senha para dependências e USB. Feche uma instalação
+anterior antes de continuar. O destino não pode ficar dentro de um checkout Git.
+
+No GNOME 46 Wayland, ao abrir o Baseus a extensão é preparada e habilitada no
+usuário. Se o aplicativo pedir, salve o trabalho e saia/entre na sessão para
+carregar a extensão nova ou atualizada. No X11 isso não é necessário.
+Roteiro de validação: [docs/teste-outro-pc.md](docs/teste-outro-pc.md).
+
 ## ✨ Funcionalidades
 
 * **Ferramentas Visuais de Apresentação:**

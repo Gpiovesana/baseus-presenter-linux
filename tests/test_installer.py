@@ -99,6 +99,10 @@ if len(sys.argv) == 3 and sys.argv[1] == '--register-desktop':
 """)
         (release / "baseus_app.py").write_text("")
         (release / "requirements.txt").write_text("")
+        shutil.copytree(ROOT / 'extensions', release / 'extensions')
+        for module in ('gnome_extension.py', 'x11_cursor.py', 'logger.py'):
+            shutil.copyfile(ROOT / 'app' / module, release / 'app' / module)
+
         (release / "version").write_text("2.0.0\n")
         (release / "updater.sh").write_text("#!/bin/bash\n")
         (release / "uninstall.sh").write_text("#!/bin/bash\n")
@@ -361,6 +365,36 @@ raise SystemExit(subprocess.call([{real_mv!r}] + sys.argv[1:]))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         with (self.root / "runtime/baseus_presenter.lock").open("a+") as lock:
             fcntl.lockf(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+
+    def test_release_payload_prepares_extension_outside_dev_checkout(self):
+        result = self.run_installer('--no-autostart')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        code = """from pathlib import Path
+from app.gnome_extension import FILES, UUID, install_extension, extension_destination
+import app.gnome_extension as module
+root = Path.cwd()
+assert Path(module.__file__).resolve().parent.parent == root
+source = root / 'extensions' / UUID
+destination = extension_destination()
+install_extension(source, destination)
+for name in FILES:
+    assert (source / name).read_bytes() == (destination / name).read_bytes()
+import app.x11_cursor
+"""
+        check = subprocess.run([sys.executable, '-c', code], cwd=self.install,
+                               env=self.env, capture_output=True, text=True, timeout=5)
+        self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_from_checkout_installs_local_payload_without_release_download(self):
+        result = self.run_installer('--no-autostart', '--from-checkout')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(self.calls.exists())
+        self.assertEqual((self.install / 'app/gnome_extension.py').read_bytes(),
+                         (ROOT / 'app/gnome_extension.py').read_bytes())
+        self.assertTrue((self.install / 'docs/wayland.md').is_file())
+        self.assertFalse((self.install / '.git').exists())
 
 
 if __name__ == "__main__":

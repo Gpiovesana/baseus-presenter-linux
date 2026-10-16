@@ -26,8 +26,10 @@ CANONICAL_HOME="$(realpath -m -- "$HOME")"
 DESKTOP_FILE="baseus-presenter.desktop"
 LOCK_FILE="${BASEUS_UPDATE_LOCK_FILE:-${INSTALL_DIR}.update-lock}"
 ENABLE_AUTOSTART=""
+FROM_CHECKOUT=false
 for arg in "$@"; do
     case "$arg" in
+        --from-checkout) FROM_CHECKOUT=true ;;
         --autostart) ENABLE_AUTOSTART=true ;;
         --no-autostart) ENABLE_AUTOSTART=false ;;
         *) say "❌ ERRO: opção desconhecida: $arg" "❌ ERROR: unknown option: $arg"; exit 2 ;;
@@ -99,7 +101,7 @@ fi
 say "📦 1/6 Instalando dependências de sistema..." "📦 1/6 Installing system dependencies..."
 sudo apt update
 sudo apt install -y curl python3 python3-venv python3-pip python3-dev build-essential \
-    libportaudio2 portaudio19-dev libxcb-cursor0 libxcb-xinerama0 xterm zenity
+    libportaudio2 portaudio19-dev libxcb-cursor0 libxcb-xinerama0 libx11-6 libxfixes3 xterm zenity
 
 say "🛡️ 2/6 Configurando permissões de hardware (udev + uaccess)..." "🛡️ 2/6 Configuring hardware permissions (udev + uaccess)..."
 sudo tee /etc/udev/rules.d/99-baseus-presenter.rules > /dev/null <<'EOF'
@@ -135,6 +137,27 @@ cleanup() {
 trap cleanup EXIT
 
 say "📥 3/6 Consultando a última release estável..." "📥 3/6 Checking the latest stable release..."
+if [[ "$FROM_CHECKOUT" == true ]]; then
+    SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+    EXTRACTED_DIR="$WORK_DIR/extracted/baseus-dev"
+    mkdir -p "$EXTRACTED_DIR"
+    # Explicit package contents: no .git, venv, logs or user configuration.
+    for item in app extensions baseus_app.py requirements.txt version updater.sh uninstall.sh; do
+        cp -a -- "$SOURCE_DIR/$item" "$EXTRACTED_DIR/"
+    done
+    if [[ -d "$SOURCE_DIR/docs" ]]; then
+        mkdir -p "$EXTRACTED_DIR/docs"
+        for doc in wayland.md gnome-cursor.md teste-outro-pc.md; do
+            [[ ! -f "$SOURCE_DIR/docs/$doc" ]] || cp -- "$SOURCE_DIR/docs/$doc" "$EXTRACTED_DIR/docs/"
+        done
+    fi
+    RELEASE_TAG="$(tr -d '[:space:]' < "$EXTRACTED_DIR/version")"
+    if [[ ! "$RELEASE_TAG" =~ ^v?[0-9]+(\.[0-9]+){1,2}$ ]]; then
+        say "❌ Versão de desenvolvimento inválida." "❌ Invalid development version."
+        exit 1
+    fi
+    say "🧪 Instalando este checkout de desenvolvimento." "🧪 Installing this development checkout."
+else
 curl -sS -fL --connect-timeout 10 --max-time 60 \
     -H "Accept: application/vnd.github+json" \
     "https://api.github.com/repos/$REPO/releases/latest" -o "$WORK_DIR/release.json"
@@ -163,6 +186,7 @@ curl -sS -fL --connect-timeout 10 --max-time 180 \
 mkdir -p "$WORK_DIR/extracted"
 tar -xzf "$WORK_DIR/release.tar.gz" -C "$WORK_DIR/extracted"
 EXTRACTED_DIR="$(find "$WORK_DIR/extracted" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+fi
 for file in app app/uninstall.py app/system_requirements.py app/system-requirements.json baseus_app.py requirements.txt version updater.sh uninstall.sh; do
     if [[ -z "$EXTRACTED_DIR" || ! -e "$EXTRACTED_DIR/$file" ]]; then
         say "❌ ERRO: release inválida: '$file' não encontrado." "❌ ERROR: invalid release: '$file' not found."
@@ -197,6 +221,12 @@ mkdir -p "$STAGING_DIR"
 cp -a "$EXTRACTED_DIR/app" "$STAGING_DIR/"
 if [[ -d "$EXTRACTED_DIR/extensions" ]]; then
     cp -a "$EXTRACTED_DIR/extensions" "$STAGING_DIR/"
+fi
+if [[ -d "$EXTRACTED_DIR/docs" ]]; then
+    mkdir -p "$STAGING_DIR/docs"
+    for doc in wayland.md gnome-cursor.md teste-outro-pc.md; do
+        [[ ! -f "$EXTRACTED_DIR/docs/$doc" ]] || cp -- "$EXTRACTED_DIR/docs/$doc" "$STAGING_DIR/docs/"
+    done
 fi
 cp "$EXTRACTED_DIR/baseus_app.py" "$EXTRACTED_DIR/requirements.txt" \
    "$EXTRACTED_DIR/version" "$EXTRACTED_DIR/updater.sh" \

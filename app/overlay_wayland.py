@@ -17,11 +17,12 @@ MODES = ('LASER', 'LUPA', 'SPOTLIGHT')
 
 
 class WaylandOverlay(QObject):
-    def __init__(self, config, on_error=None, on_recovered=None):
+    def __init__(self, config, on_error=None, on_recovered=None, preparation_warning=None):
         super().__init__()
         self.config = config if isinstance(config, Config) else Config(config)
         self.on_error = on_error
         self.on_recovered = on_recovered
+        self.preparation_warning = preparation_warning
         self._warning_message = None
         self.available = None
         self._closed = False
@@ -50,13 +51,13 @@ class WaylandOverlay(QObject):
         if self.available == available:
             return
         self.available = available
-        if available:
+        if available and not self.preparation_warning:
             log.info('Overlay GNOME conectado.')
             if self._warning_message and self.on_recovered:
                 self.on_recovered(self._warning_message)
             self._warning_message = None
         else:
-            message = tr('Overlay Wayland indisponível. Ative a extensão Baseus Presenter '
+            message = self.preparation_warning or tr('Overlay Wayland indisponível. Ative a extensão Baseus Presenter '
                          'no GNOME. Consulte docs/wayland.md; a navegação de slides continua disponível.')
             log.warning(message)
             self._warning_message = message

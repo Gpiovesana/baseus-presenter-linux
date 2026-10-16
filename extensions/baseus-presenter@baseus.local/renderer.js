@@ -27,7 +27,11 @@ export class Renderer {
         this._penSerial = null;
         this._cursorTracker = global.backend?.get_cursor_tracker?.() ??
             (Meta?.CursorTracker?.get_for_display ? Meta.CursorTracker.get_for_display(global.display) : null);
+        this._compositionRequired = false;
         this._cursorHidden = false;
+        this._cursorVisibilitySignal = 0;
+        this._cursorSeat = Clutter.get_default_backend().get_default_seat();
+        this._cursorUnfocusInhibited = false;
     }
 
     _add(actor) {
@@ -48,12 +52,48 @@ export class Renderer {
         }
     }
 
-    _setCursorHidden(hidden) {
-        if (this._cursorHidden === hidden)
+    _setCompositionRequired(required) {
+        if (this._compositionRequired === required)
             return;
-        this._cursorHidden = hidden;
+        // GNOME 46 magnifier uses this same refcounted compositor API.
+        // Own one reference while overlays need compositing over fullscreen.
+        if (required)
+            Meta.disable_unredirect_for_display(global.display);
+        else
+            Meta.enable_unredirect_for_display(global.display);
+        this._compositionRequired = required;
+    }
+
+    _setCursorHidden(hidden) {
+        if (!this._cursorTracker ||
+            (this._cursorHidden === hidden &&
+                (hidden || (!this._cursorVisibilitySignal && !this._cursorUnfocusInhibited))))
+            return;
         try {
-            this._cursorTracker?.set_pointer_visible(!hidden);
+            // Keep pointer focus usable while hidden, as Shell's magnifier does.
+            // This is refcounted: own exactly one reference across effect changes.
+            if (hidden && !this._cursorUnfocusInhibited) {
+                this._cursorSeat.inhibit_unfocus();
+                this._cursorUnfocusInhibited = true;
+            }
+            // GNOME 46 has no inhibit_cursor_visibility(). Like Shell's
+            // magnifier, keep it hidden if Mutter shows it again on input.
+            if (hidden && !this._cursorVisibilitySignal) {
+                this._cursorVisibilitySignal = this._cursorTracker.connect('visibility-changed', () => {
+                    if (this._cursorTracker.get_pointer_visible())
+                        this._cursorTracker.set_pointer_visible(false);
+                });
+            } else if (!hidden && this._cursorVisibilitySignal) {
+                // Disconnect first so restoring visibility cannot hide it again.
+                this._cursorTracker.disconnect(this._cursorVisibilitySignal);
+                this._cursorVisibilitySignal = 0;
+            }
+            this._cursorTracker.set_pointer_visible(!hidden);
+            if (!hidden && this._cursorUnfocusInhibited) {
+                this._cursorSeat.uninhibit_unfocus();
+                this._cursorUnfocusInhibited = false;
+            }
+            this._cursorHidden = hidden;
         } catch (error) {
             console.error(`[BASEUS] set_pointer_visible: ${error}`);
         }
@@ -68,6 +108,7 @@ export class Renderer {
                 console.error(`[BASEUS] actor cleanup: ${error}`);
             }
         }
+        this._setCompositionRequired(false);
         this._strokes = [];
         this._current = null;
         this._tools = null;
@@ -269,8 +310,11 @@ export class Renderer {
             this._tools?.lensRoot?.hide();
             this._current = null;
             this._setCursorHidden(false);
+            this._setCompositionRequired(this._strokes.some(s => s.actor.visible));
             return;
         }
+        this._setCompositionRequired(Boolean(state.active || state.black ||
+            state.subtitle || state.pen || this._strokes.length));
         if (!state.pen || state.black)
             this._current = null;
         const v = state.visual;

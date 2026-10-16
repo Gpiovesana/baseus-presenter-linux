@@ -520,5 +520,34 @@ class TestCacheEntreMonitores(OverlayTestCase):
         self.assertEqual(win.pen_strokes[0]["points"][0], QPoint(100, 100))
 
 
+class TestNativeCursor(OverlayTestCase):
+    def test_overlapping_tools_keep_cursor_hidden_until_last_release(self):
+        win = self.make_overlay()
+        win._native_cursor = mock.Mock()
+        win.set_active(True)
+        win._native_cursor.set_hidden.assert_called_with(True)
+        win.set_pen_active(True)
+        win.set_active(False)
+        win._native_cursor.set_hidden.assert_called_with(True)
+        win.set_pen_active(False)
+        win._native_cursor.set_hidden.assert_called_with(False)
+        win.toggle_black_screen()
+        win._native_cursor.set_hidden.assert_called_with(True)
+        win.toggle_black_screen()
+        win._native_cursor.set_hidden.assert_called_with(False)
+        win.close()
+        win._native_cursor.close.assert_called_once()
+
+    def test_close_while_effect_active_releases_native_cursor(self):
+        win = self.make_overlay()
+        win._native_cursor = mock.Mock()
+        win.set_active(True)
+        win.set_pen_active(True)
+        win.close()
+        win._native_cursor.close.assert_called_once()
+        self.assertFalse(win.timer.isActive())
+        self.assertFalse(win.subtitle_timer.isActive())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

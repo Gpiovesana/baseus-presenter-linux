@@ -4,29 +4,41 @@ O checkout agora seleciona `WaylandOverlay` na sessão Wayland. Ele envia
 estado por QtDBus para uma extensão **GNOME 46**, que lê o cursor e desenha
 atores não reativos. X11 continua usando `app/overlay.py`. A extensão foi
 precedida de um spike confirmado sobre Okular em apresentação e em duas telas;
-as ferramentas integradas ainda precisam de teste real. KDE/wlroots não são
+Gabriel confirmou funcionamento dos efeitos e do fullscreen do Manim em
+15/10/2026; a matriz completa de encerramento, hotplug e escala mista ainda
+precisa de validação. KDE/wlroots não são
 atendidos por essa extensão.
 
-## Preparar a extensão experimental
+## Preparação automática
 
-Dentro da instalação ou checkout:
+Ao abrir Baseus numa sessão GNOME 46 Wayland, o aplicativo instala/atualiza
+os quatro arquivos da extensão e solicita sua habilitação no usuário.
+A instalação respeita `XDG_DATA_HOME` (padrão `~/.local/share`), conserva
+backup e não modifica as outras extensões habilitadas. Não requer sudo.
+
+Quando os arquivos mudam, o aviso pede salvar trabalho e sair/entrar na
+sessão. Reabrir somente o aplicativo na mesma sessão não remove esse aviso:
+os módulos antigos podem continuar carregados. Nenhum logout é executado.
+Na sessão seguinte, abrir o Baseus conclui a habilitação. Caso o usuário tenha
+desativado globalmente extensões GNOME, será necessário reativá-las nas
+preferências do GNOME; o Baseus não altera essa preferência global.
+
+Outros compositores/versões recebem aviso de incompatibilidade. Se falhar a
+preparação ou conexão, a navegação de slides continua disponível. Não há
+fallback automático para overlay Qt/XWayland. Não force `QT_QPA_PLATFORM`.
+
+Para reparo manual, dentro da instalação:
 
 ```bash
 .venv/bin/python -m app.gnome_extension
 ```
 
-Instala apenas no usuário e preserva backup da versão anterior. Não ativa a
-extensão. Se for nova ou atualizada, salvar trabalho e fazer logout/login
-manualmente; módulos do Shell podem permanecer em cache. Depois:
+Esse comando apenas instala e guarda backup. Depois de sair/entrar na sessão:
 
 ```bash
 gnome-extensions enable baseus-presenter@baseus.local
 .venv/bin/python baseus_app.py
 ```
-
-Sem a extensão, a GUI exibe aviso e o passador mantém navegação de slides.
-Não há fallback automático para o overlay Qt/XWayland que bloqueou input.
-Não é necessário forçar `QT_QPA_PLATFORM=xcb` ou `wayland` para a GUI.
 
 Para ensaio sem passador/áudio, com Baseus fechado e PDF pronto, executar:
 
@@ -67,9 +79,11 @@ desabilitar antes de removê-los. Não é preciso remover configurações do Bas
   A lente fica fora da fonte, evitando recursão. Inclui interface do Shell e
   traços de caneta. Na v1 o clone de `global.window_group` ficou preto em formas
   quadrada e circular: esse grupo declara tamanho natural zero no Mutter46.2.
-  A correção v2 ainda exige teste visual real após recarregar a extensão.
+  O funcionamento da lupa foi confirmado por Gabriel após recarregar a extensão.
 - Timers de limpeza não protegem contra bloqueio do loop ou falha nativa do
-  próprio Shell. Sem modificações em unredirection, kernel ou drivers.
+  próprio Shell. Enquanto há efeitos/legendas/traços, o renderer inibe unredirection pela
+  API do Mutter46 e libera ao remover os visuais ou resetar. Isso resolveu
+  o fullscreen do Manim no teste de Gabriel. Kernel e drivers não foram alterados.
 
 Verificações de desenvolvimento:
 

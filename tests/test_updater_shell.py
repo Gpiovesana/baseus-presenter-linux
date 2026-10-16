@@ -81,6 +81,10 @@ if len(sys.argv) == 3 and sys.argv[1] == '--register-desktop':
 """)
         (self.release / "version").write_text("2.0.0\n")
         (self.release / "requirements.txt").write_text("")
+        shutil.copytree(ROOT / 'extensions', self.release / 'extensions')
+        for module in ('gnome_extension.py', 'x11_cursor.py', 'logger.py'):
+            shutil.copyfile(ROOT / 'app' / module, self.release / 'app' / module)
+
         (self.release / "updater.sh").write_text("#!/bin/bash\n")
         (self.release / "uninstall.sh").write_text("#!/bin/bash\n")
         shutil.copyfile(ROOT / 'app/system_requirements.py', self.release / 'app/system_requirements.py')
@@ -332,3 +336,22 @@ exec "{real_mv}" "$@"
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual((self.install / "version").read_text(), "1.0.0\n")
         self.assertTrue(backup.exists())
+
+    def test_release_payload_prepares_extension_outside_dev_checkout(self):
+        result = self.run_update()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        code = """from pathlib import Path
+from app.gnome_extension import FILES, UUID, install_extension, extension_destination
+import app.gnome_extension as module
+root = Path.cwd()
+assert Path(module.__file__).resolve().parent.parent == root
+source = root / 'extensions' / UUID
+destination = extension_destination()
+install_extension(source, destination)
+for name in FILES:
+    assert (source / name).read_bytes() == (destination / name).read_bytes()
+import app.x11_cursor
+"""
+        check = subprocess.run([sys.executable, '-c', code], cwd=self.install,
+                               env=self.env, capture_output=True, text=True, timeout=5)
+        self.assertEqual(check.returncode, 0, check.stdout + check.stderr)

@@ -51,8 +51,10 @@ graphify-out/
 *.swp
 .DS_Store
 *~
-docs/
 
 # Anotações internas de desenvolvimento
-docs/
 status.md
+docs/
+
+# Modelos 3D em desenvolvimento, ainda fora da distribuição
+design/baseus-3d/

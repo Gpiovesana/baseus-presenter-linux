@@ -977,8 +977,8 @@ Download it? (About 30 MB)</translation>
       <translation>Not set</translation>
     </message>
     <message>
-      <source>Overlay Wayland indisponível. Ative a extensão Baseus Presenter no GNOME. Consulte docs/wayland.md; a navegação de slides continua disponível.</source>
-      <translation>Wayland overlay unavailable. Enable the Baseus Presenter extension in GNOME. See docs/wayland.md; slide navigation remains available.</translation>
+      <source>Overlay Wayland indisponível. Ative a extensão Baseus Presenter no GNOME. A navegação de slides continua disponível.</source>
+      <translation>Wayland overlay unavailable. Enable the Baseus Presenter extension in GNOME. Slide navigation remains available.</translation>
     </message>
     <message>
       <source>Circular</source>

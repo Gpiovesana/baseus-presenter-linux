@@ -156,6 +156,13 @@ time.sleep(1)
                 self.assertEqual(self.status.read_text().strip(), 'ERROR')
                 self.assertIn('reinstal', result.stdout.lower())
 
+    def test_update_omits_legacy_documentation(self):
+        (self.release / "docs").mkdir()
+        (self.release / "docs/wayland.md").write_text("legacy documentation")
+        result = self.run_update()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((self.install / "docs").exists())
+
     def test_system_record_survives_success_and_rollback(self):
         original = (self.install / '.system-requirements.json').read_bytes()
         self.env['FAIL_STARTUP'] = '1'

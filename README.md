@@ -22,12 +22,16 @@ Um software open-source não-oficial que desbloqueia e expande todas as funciona
 
 > 🐧 **Compatibilidade:** Testado no Zorin OS. Projetado para distribuições Linux baseadas em Debian/Ubuntu. Testes da comunidade em outras distribuições são bem-vindos.
 
-No checkout de desenvolvimento há integração **experimental com GNOME 46 em
+Há integração **experimental com GNOME 46 em
 Wayland**, por extensão local. X11 mantém o overlay existente.
 
 No GNOME 46 Wayland, ao abrir o Baseus a extensão é preparada e habilitada no
 usuário. Se o aplicativo pedir, salve o trabalho e saia/entre na sessão para
 carregar a extensão nova ou atualizada. No X11 isso não é necessário.
+
+Outras versões do GNOME e outros compositores Wayland não são atendidos por
+esta extensão. A navegação de slides continua disponível. Escala mista e
+conexão/desconexão de monitores ainda precisam de validação completa.
 
 ## ✨ Funcionalidades
 
@@ -99,7 +103,7 @@ O aplicativo é encerrado antes da remoção. A pasta de instalação inteira,
 o ambiente virtual, os atalhos e a inicialização automática são removidos.
 Configurações, modelos e transcrições fora da pasta de instalação são preservados;
 arquivos pessoais dentro dela também serão apagados. A remoção não usa a lixeira.
-O recurso fica desativado em checkouts Git de desenvolvimento.
+
 
 Se necessário, execute `bash ~/BaseusPresenter/uninstall.sh` (ajuste o caminho
 se instalou em outra pasta). O mesmo aviso de confirmação será exibido.
@@ -169,6 +173,15 @@ An unofficial open-source software that unlocks and expands all features of the 
 > ⚠️ **Disclaimer:** This is an independent open-source project. It has no affiliation, endorsement, sponsorship, or commercial tie with the Baseus brand.
 
 > 🐧 **Compatibility:** Tested on Zorin OS. Designed for Debian/Ubuntu-based Linux distributions. Community testing on other distributions is welcome.
+
+Experimental **GNOME 46 Wayland** effects use a local extension. Baseus
+prepares and enables it for your user when opened. If prompted, save your work
+and log out and back in to load the new or updated extension. X11 uses the
+original overlay.
+
+Other GNOME versions and Wayland compositors are not currently supported by
+this extension. Slide navigation remains available. Mixed scaling and monitor
+hotplug still require full validation.
 
 ## ✨ Features
 * **Visual Presentation Tools:**
@@ -252,8 +265,7 @@ is unavailable. New installations include Zenity, which provides this window.
 The application exits before removal. The entire installation folder, virtual
 environment, shortcuts, and autostart entry are removed. Settings, models, and
 transcripts outside the installation folder are preserved; personal files inside
-it are also deleted. Removed files are not sent to the Trash.
-Uninstallation is disabled in development Git checkouts.
+it are also deleted.
 
 If needed, run `bash ~/BaseusPresenter/uninstall.sh` (adjust the path if you
 installed it elsewhere). The same confirmation warning will appear.

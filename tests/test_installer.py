@@ -172,6 +172,16 @@ if len(sys.argv) == 3 and sys.argv[1] == '--register-desktop':
                 self.assertFalse(any(self.root.glob("installation.backup.*")))
                 self.assertFalse(any(self.root.glob("installation.prepare.*")))
 
+    def test_release_install_omits_legacy_documentation(self):
+        package = self.root / "release"
+        (package / "docs").mkdir()
+        (package / "docs/wayland.md").write_text("legacy documentation")
+        with tarfile.open(self.env['FAKE_RELEASE'], "w:gz") as archive:
+            archive.add(package, arcname="baseus-presenter-linux-2.0.0")
+        result = self.run_installer("--no-autostart")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((self.install / "docs").exists())
+
     def test_first_install_and_no_autostart(self):
         destination = self.root / "fresh-installation"
         self.env["BASEUS_INSTALL_DIR"] = str(destination)
@@ -393,7 +403,7 @@ import app.x11_cursor
         self.assertFalse(self.calls.exists())
         self.assertEqual((self.install / 'app/gnome_extension.py').read_bytes(),
                          (ROOT / 'app/gnome_extension.py').read_bytes())
-        self.assertTrue((self.install / 'docs/wayland.md').is_file())
+        self.assertFalse((self.install / 'docs').exists())
         self.assertFalse((self.install / '.git').exists())
 
 

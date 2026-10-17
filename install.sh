@@ -145,12 +145,6 @@ if [[ "$FROM_CHECKOUT" == true ]]; then
     for item in app extensions baseus_app.py requirements.txt version updater.sh uninstall.sh; do
         cp -a -- "$SOURCE_DIR/$item" "$EXTRACTED_DIR/"
     done
-    if [[ -d "$SOURCE_DIR/docs" ]]; then
-        mkdir -p "$EXTRACTED_DIR/docs"
-        for doc in wayland.md gnome-cursor.md teste-outro-pc.md; do
-            [[ ! -f "$SOURCE_DIR/docs/$doc" ]] || cp -- "$SOURCE_DIR/docs/$doc" "$EXTRACTED_DIR/docs/"
-        done
-    fi
     RELEASE_TAG="$(tr -d '[:space:]' < "$EXTRACTED_DIR/version")"
     if [[ ! "$RELEASE_TAG" =~ ^v?[0-9]+(\.[0-9]+){1,2}$ ]]; then
         say "❌ Versão de desenvolvimento inválida." "❌ Invalid development version."
@@ -221,12 +215,6 @@ mkdir -p "$STAGING_DIR"
 cp -a "$EXTRACTED_DIR/app" "$STAGING_DIR/"
 if [[ -d "$EXTRACTED_DIR/extensions" ]]; then
     cp -a "$EXTRACTED_DIR/extensions" "$STAGING_DIR/"
-fi
-if [[ -d "$EXTRACTED_DIR/docs" ]]; then
-    mkdir -p "$STAGING_DIR/docs"
-    for doc in wayland.md gnome-cursor.md teste-outro-pc.md; do
-        [[ ! -f "$EXTRACTED_DIR/docs/$doc" ]] || cp -- "$EXTRACTED_DIR/docs/$doc" "$STAGING_DIR/docs/"
-    done
 fi
 cp "$EXTRACTED_DIR/baseus_app.py" "$EXTRACTED_DIR/requirements.txt" \
    "$EXTRACTED_DIR/version" "$EXTRACTED_DIR/updater.sh" \

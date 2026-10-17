@@ -58,7 +58,7 @@ class WaylandOverlay(QObject):
             self._warning_message = None
         else:
             message = self.preparation_warning or tr('Overlay Wayland indisponível. Ative a extensão Baseus Presenter '
-                         'no GNOME. Consulte docs/wayland.md; a navegação de slides continua disponível.')
+                         'no GNOME. A navegação de slides continua disponível.')
             log.warning(message)
             self._warning_message = message
             if self.on_error:

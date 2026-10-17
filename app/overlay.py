@@ -7,6 +7,7 @@ from PyQt5.QtGui import (QPainter, QColor, QPen, QPainterPath, QRegion, QFont,
 
 from .logger import get_logger
 from .config import Config
+from .i18n import tr
 from .x11_cursor import X11Cursor
 
 log = get_logger(__name__)
@@ -228,12 +229,12 @@ class PointerWindow(QMainWindow):
             return
         self.is_recording = state
         self.show_subtitle(
-            "[GRAVANDO]" if state else "[PAUSADO]", duration=2000)
+            tr('[GRAVANDO]') if state else tr('[PAUSADO]'), duration=2000)
 
     def set_translating(self, state):
         self.is_translating = state
         self.show_subtitle(
-            "[TRADUÇÃO ON]" if state else "[TRADUÇÃO OFF]", duration=2000)
+            tr('[TRADUÇÃO ON]') if state else tr('[TRADUÇÃO OFF]'), duration=2000)
 
     def show_subtitle(self, text, duration=5000):
         self.subtitle_text = text

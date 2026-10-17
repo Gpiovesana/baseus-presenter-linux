@@ -120,11 +120,11 @@ class WaylandOverlay(QObject):
     def set_recording(self, state):
         if self.is_recording != state:
             self.is_recording = state
-            self.show_subtitle('[GRAVANDO]' if state else '[PAUSADO]', 2000)
+            self.show_subtitle(tr('[GRAVANDO]') if state else tr('[PAUSADO]'), 2000)
 
     def set_translating(self, state):
         self.is_translating = state
-        self.show_subtitle('[TRADUÇÃO ON]' if state else '[TRADUÇÃO OFF]', 2000)
+        self.show_subtitle(tr('[TRADUÇÃO ON]') if state else tr('[TRADUÇÃO OFF]'), 2000)
 
     def update_visual_config(self):
         defaults = dict(laser_size=30, laser_color='#FF0000', pincel_color='#FF0000',

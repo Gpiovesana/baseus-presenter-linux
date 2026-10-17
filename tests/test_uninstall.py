@@ -1,4 +1,6 @@
 """Safety and transaction tests for the standalone uninstaller."""
+import ast
+import json
 import fcntl
 import io
 import os
@@ -16,6 +18,12 @@ from app import uninstall
 
 class TestUninstall(unittest.TestCase):
     def setUp(self):
+        from app import i18n
+        for patch in (mock.patch.object(i18n, "_language", "pt"),
+                      mock.patch.object(i18n, "_translator", None),
+                      mock.patch.object(uninstall, "configure_standalone")):
+            patch.start()
+            self.addCleanup(patch.stop)
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.addCleanup(os.chdir, Path.cwd())
@@ -235,6 +243,152 @@ class TestUninstall(unittest.TestCase):
                 uninstall.remove_installation(self.install)
         self.assertTrue(self.install.exists())
         stop.assert_not_called()
+
+
+    def make_gnome_artifact(self, relative, uuid="baseus-presenter@baseus.local"):
+        path = self.data / "gnome-shell" / relative
+        path.mkdir(parents=True)
+        (path / "metadata.json").write_text(json.dumps({"uuid": uuid}))
+        (path / "renderer.js").write_text("preserve until disabled")
+        return path
+
+    def remove_with_gsettings(self, run):
+        with mock.patch.object(uninstall.os, "geteuid", return_value=1000), \
+                mock.patch.object(uninstall, "stop_application"), \
+                mock.patch.object(uninstall.subprocess, "run", side_effect=run):
+            uninstall.remove_installation(self.install)
+
+    def test_gnome_cleanup_disables_before_removing_only_owned_artifacts(self):
+        uuid = "baseus-presenter@baseus.local"
+        extension = self.make_gnome_artifact("extensions/" + uuid)
+        backup = self.make_gnome_artifact("baseus-extension-backups/" + uuid + ".bak-20261015")
+        other = self.make_gnome_artifact("extensions/other@example", "other@example")
+        other_backup = self.make_gnome_artifact("baseus-extension-backups/other@example.bak-old", "other@example")
+        calls = []
+        enabled = ["other@example", uuid, uuid]
+        def run(args, **kwargs):
+            calls.append(args)
+            self.assertTrue(extension.exists())
+            self.assertTrue(backup.exists())
+            self.assertTrue(self.install.exists())
+            if args[1] == "get":
+                return subprocess.CompletedProcess(args, 0, repr(enabled), "")
+            self.assertEqual(ast.literal_eval(args[-1]), ["other@example"])
+            enabled[:] = ast.literal_eval(args[-1])
+            return subprocess.CompletedProcess(args, 0, "", "")
+        self.remove_with_gsettings(run)
+        self.assertEqual([args[1] for args in calls], ["get", "set", "get"])
+        self.assertFalse(extension.exists())
+        self.assertFalse(backup.exists())
+        self.assertFalse(self.install.exists())
+        self.assertTrue((other / "renderer.js").exists())
+        self.assertTrue((other_backup / "renderer.js").exists())
+
+    def test_gnome_disable_failure_preserves_files_and_installation(self):
+        uuid = "baseus-presenter@baseus.local"
+        extension = self.make_gnome_artifact("extensions/" + uuid)
+        def run(args, **kwargs):
+            if args[1] == "get":
+                return subprocess.CompletedProcess(args, 0, repr([uuid]), "")
+            raise subprocess.CalledProcessError(1, args)
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.remove_with_gsettings(run)
+        self.assertTrue(extension.exists())
+        self.assertTrue(self.install.exists())
+
+    def test_gnome_cleanup_rejects_mismatched_metadata_before_disabling(self):
+        path = self.make_gnome_artifact("extensions/baseus-presenter@baseus.local", "other@example")
+        run = mock.Mock()
+        with self.assertRaises(ValueError):
+            self.remove_with_gsettings(run)
+        run.assert_not_called()
+        self.assertTrue(path.exists())
+        self.assertTrue(self.install.exists())
+
+    def test_gnome_cleanup_rejects_symlink_to_external_data(self):
+        uuid = "baseus-presenter@baseus.local"
+        external = self.root / "personal-data"
+        external.mkdir()
+        (external / "keep.txt").write_text("keep")
+        extension = self.data / "gnome-shell/extensions" / uuid
+        extension.parent.mkdir(parents=True)
+        extension.symlink_to(external, target_is_directory=True)
+        run = mock.Mock()
+        with self.assertRaises(ValueError):
+            self.remove_with_gsettings(run)
+        run.assert_not_called()
+        self.assertTrue((external / "keep.txt").exists())
+        self.assertTrue(self.install.exists())
+
+    def test_gnome_cleanup_validates_all_backups_before_deleting_anything(self):
+        uuid = "baseus-presenter@baseus.local"
+        extension = self.make_gnome_artifact("extensions/" + uuid)
+        backup = self.make_gnome_artifact("baseus-extension-backups/" + uuid + ".bak-old", "other@example")
+        run = mock.Mock()
+        with self.assertRaises(ValueError):
+            self.remove_with_gsettings(run)
+        run.assert_not_called()
+        self.assertTrue(extension.exists())
+        self.assertTrue(backup.exists())
+        self.assertTrue(self.install.exists())
+
+    def test_gnome_cleanup_rejects_invalid_settings_and_missing_command(self):
+        path = self.make_gnome_artifact("extensions/baseus-presenter@baseus.local")
+        for output in ("invalid", "[", "{}", "[42]"):
+            with self.subTest(output=output), self.assertRaises(ValueError):
+                self.remove_with_gsettings(lambda args, **kw: subprocess.CompletedProcess(args, 0, output, ""))
+            self.assertTrue(path.exists())
+            self.assertTrue(self.install.exists())
+        with self.assertRaises(FileNotFoundError):
+            self.remove_with_gsettings(mock.Mock(side_effect=FileNotFoundError("gsettings")))
+        self.assertTrue(path.exists())
+        self.assertTrue(self.install.exists())
+
+    def test_gnome_cleanup_handles_disabled_extension_and_empty_gsettings_array(self):
+        path = self.make_gnome_artifact("extensions/baseus-presenter@baseus.local")
+        run = mock.Mock(side_effect=lambda args, **kw: subprocess.CompletedProcess(args, 0, "@as []", ""))
+        self.remove_with_gsettings(run)
+        self.assertEqual(run.call_count, 1)
+        self.assertFalse(path.exists())
+
+
+    def test_gnome_uncommitted_setting_preserves_files(self):
+        uuid = "baseus-presenter@baseus.local"
+        path = self.make_gnome_artifact("extensions/" + uuid)
+        def run(args, **kwargs):
+            return subprocess.CompletedProcess(args, 0, repr([uuid]) if args[1] == "get" else "", "")
+        with self.assertRaises(RuntimeError):
+            self.remove_with_gsettings(run)
+        self.assertTrue(path.exists())
+        self.assertTrue(self.install.exists())
+
+    def test_gnome_cleanup_rejects_symlinked_parent_directory(self):
+        uuid = "baseus-presenter@baseus.local"
+        path = self.make_gnome_artifact("extensions/" + uuid)
+        parent = path.parent
+        external = self.root / "external-extensions"
+        parent.rename(external)
+        parent.symlink_to(external, target_is_directory=True)
+        run = mock.Mock()
+        with self.assertRaises(ValueError):
+            self.remove_with_gsettings(run)
+        run.assert_not_called()
+        self.assertTrue((external / uuid / "renderer.js").exists())
+        self.assertTrue(self.install.exists())
+
+    def test_gnome_cleanup_rejects_symlinked_backup_directory(self):
+        path = self.make_gnome_artifact("extensions/baseus-presenter@baseus.local")
+        external = self.root / "personal-backups"
+        external.mkdir()
+        (external / "keep.txt").write_text("keep")
+        (self.data / "gnome-shell/baseus-extension-backups").symlink_to(external, target_is_directory=True)
+        run = mock.Mock()
+        with self.assertRaises(ValueError):
+            self.remove_with_gsettings(run)
+        run.assert_not_called()
+        self.assertTrue(path.exists())
+        self.assertTrue((external / "keep.txt").exists())
+        self.assertTrue(self.install.exists())
 
 
 if __name__ == "__main__":

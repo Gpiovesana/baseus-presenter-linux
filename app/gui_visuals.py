@@ -1,18 +1,25 @@
 """Ilustrações locais da GUI; não captura pixels do desktop."""
 from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal
-from PyQt5.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
-from PyQt5.QtWidgets import QWidget, QPushButton
+from PyQt5.QtGui import QGuiApplication, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
+from PyQt5.QtWidgets import (QWidget, QPushButton, QLabel, QVBoxLayout,
+                             QHBoxLayout, QGridLayout, QStackedLayout)
 from .i18n import tr
+from .device_3d import ModelView, MODEL_PATH
 
 
 def control_descriptions():
     return {
-        'laser': (tr('Laser digital'), tr('Segure para apontar'), tr('SEGURAR'), tr('Ativa a ferramenta visual selecionada enquanto o botão estiver pressionado.'), tr('CLIQUE DUPLO'), tr('Alterna entre laser, lupa e spotlight.')),
+        'laser': (tr('Mouse e efeitos digitais'), tr('Botão com símbolo de mouse'), tr('SEGURAR'), tr('Ativa a ferramenta visual selecionada enquanto o botão estiver pressionado.'), tr('CLIQUE DUPLO'), tr('Alterna entre laser, lupa e spotlight.')),
+        'physical_laser': (tr('Laser físico'), tr('Botão laranja do passador'), tr('APONTADOR FÍSICO'), tr('Aciona o laser emitido pelo próprio passador.'), tr('HARDWARE'), tr('Esse controle funciona diretamente no dispositivo.')),
         'next': (tr('Avançar'), tr('Próximo slide'), tr('CLIQUE'), tr('Avança a apresentação usando o comando nativo do passador.'), tr('SEGURAR'), tr('Alterna a tela preta para trazer a atenção de volta a você.')),
         'back': (tr('Voltar'), tr('Slide anterior'), tr('CLIQUE'), tr('Volta ao slide anterior usando o comando nativo do passador.'), tr('DICA'), tr('A navegação continua sob controle do aplicativo de apresentação.')),
+        'screen': (tr('Links e janelas'), tr('Botão pequeno ao lado de Voltar'), tr('CLIQUE / DUPLO CLIQUE'), tr('Um clique abre o hyperlink selecionado; dois cliques navegam entre hyperlinks.'), tr('SEGURAR'), tr('Abre a visão de múltiplas janelas.')),
         'pen': (tr('Pincel'), tr('Desenhar e apagar'), tr('SEGURAR'), tr('Ativa o desenho sobre a apresentação.'), tr('APAGAR'), tr('O comando de borracha do passador limpa os traços.')),
         'mic': (tr('Microfone'), tr('Transcrição de voz'), tr('CLIQUE'), tr('Inicia ou encerra a gravação da transcrição.'), tr('PROCESSAMENTO LOCAL'), tr('O reconhecimento usa o modelo de voz selecionado nas configurações.')),
         'translate': (tr('Tradução'), tr('Legendas traduzidas'), tr('CLIQUE'), tr('Ativa ou desativa as legendas traduzidas.'), tr('IDIOMA'), tr('O idioma de destino é definido em Áudio e tradução.')),
+        'volume_up': (tr('Volume +'), tr('Botão lateral de aumentar volume'), tr('CLIQUE'), tr('Aumenta o volume usando o comando nativo do passador.'), tr('SISTEMA'), tr('O ajuste é feito pelo controle de volume do sistema.')),
+        'volume_down': (tr('Volume −'), tr('Botão lateral de diminuir volume'), tr('CLIQUE'), tr('Diminui o volume usando o comando nativo do passador.'), tr('SISTEMA'), tr('O ajuste é feito pelo controle de volume do sistema.')),
+        'power': (tr('Ligar / desligar'), tr('Chave ON/OFF na lateral'), tr('DESLIZAR'), tr('Liga ou desliga o passador.'), tr('HARDWARE'), tr('A chave controla a alimentação do dispositivo.')),
     }
 
 
@@ -21,73 +28,49 @@ class Device(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setMinimumSize(510, 440)
-        self.active = "laser"
-        self.buttons = {}
-        for key, info in control_descriptions().items():
-            button = QPushButton(info[0] + "\n" + info[1], self)
-            button.setCheckable(True)
-            button.setAccessibleName(info[0])
-            button.clicked.connect(lambda _checked, key=key: self.selected.emit(key))
-            self.buttons[key] = button
+        self.setMinimumSize(400,440)
+        self.active='laser';self.buttons={}
+        layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0)
+        self.stack=QStackedLayout();layout.addLayout(self.stack,1)
+        self.view=ModelView(self);self.stack.addWidget(self.view)
+        self.fallback=QLabel();self.fallback.setAlignment(Qt.AlignCenter)
+        self._preview=QPixmap(str(MODEL_PATH.with_name('device-preview.png')))
+        self.stack.addWidget(self.fallback)
+        self.view.unavailable.connect(self.show_fallback)
+        self.view.control_clicked.connect(self.selected.emit)
+        toolbar=QHBoxLayout()
+        self.hint=QLabel(tr('Clique em um botão do modelo para selecioná-lo · Arraste para girar · Roda para zoom'))
+        self.hint.setWordWrap(True);toolbar.addWidget(self.hint,1)
+        self.reset_button=QPushButton(tr('Restaurar vista'))
+        self.reset_button.clicked.connect(self.view.reset_view);toolbar.addWidget(self.reset_button)
+        layout.addLayout(toolbar)
+        controls=QGridLayout();layout.addLayout(controls)
+        for index,(key,info) in enumerate(control_descriptions().items()):
+            button=QPushButton(info[0]);button.setCheckable(True)
+            button.setAccessibleName(info[0]);button.setToolTip(info[1])
+            button.clicked.connect(lambda _checked,key=key:self.selected.emit(key))
+            controls.addWidget(button,index//4,index%4);self.buttons[key]=button
+        if QGuiApplication.platformName() in ('offscreen','minimal'):
+            self.show_fallback()
 
-    def select(self, key):
-        self.active = key
-        for name, button in self.buttons.items():
-            button.setChecked(name == key)
-        self.update()
+    def select(self,key):
+        if key!=self.active:self.view.orient_for_control(key)
+        self.active=key;self.view.active=key
+        for name,button in self.buttons.items():button.setChecked(name==key)
+        self.view.update()
 
-    def mousePressEvent(self, event):
-        for key, fraction in [('laser',.18),('next',.29),('back',.40),('pen',.51),('mic',.62),('translate',.73)]:
-            point = QPointF(self.width()/2, self.height()*fraction+5)
-            delta = QPointF(event.pos())-point
-            if delta.x()**2+delta.y()**2 <= 25**2:
-                self.selected.emit(key)
-                return
-        super().mousePressEvent(event)
+    def show_fallback(self):
+        self.stack.setCurrentWidget(self.fallback)
+        self.hint.setText(tr('Visualização 3D indisponível. Use os botões abaixo para conhecer os controles.'))
+        self.reset_button.setEnabled(False)
+        self._resize_preview()
 
-    def resizeEvent(self, event):
-        w, h = self.width(), self.height()
-        for key, (left, fraction) in {
-            "laser": (True, .18), "next": (False, .29), "back": (True, .40),
-            "pen": (False, .51), "mic": (True, .62), "translate": (False, .73),
-        }.items():
-            self.buttons[key].setGeometry(14 if left else w-178, int(h*fraction)-24, 164, 62)
+    def _resize_preview(self):
+        self.fallback.setPixmap(self._preview.scaled(self.width(),max(1,self.height()-140),Qt.KeepAspectRatio,Qt.SmoothTransformation))
+
+    def resizeEvent(self,event):
         super().resizeEvent(event)
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        w, h = self.width(), self.height()
-        center, top = w/2, h*.08
-        body = QRectF(center-57, top, 114, h*.82)
-        gradient = QLinearGradient(body.topLeft(), body.topRight())
-        gradient.setColorAt(0, QColor('#343b45'))
-        gradient.setColorAt(.45, QColor('#242a32'))
-        gradient.setColorAt(1, QColor('#15191f'))
-        p.setPen(QPen(QColor('#4a535f'), 1.5))
-        p.setBrush(gradient)
-        p.drawRoundedRect(body, 48, 48)
-        p.setPen(Qt.NoPen)
-        p.setBrush(QColor('#f5a34a'))
-        p.drawRoundedRect(QRectF(center-15, top+16, 30, 5), 2, 2)
-        glyphs = {'laser': '●', 'next': '↓', 'back': '↑', 'pen': '✎', 'mic': 'M', 'translate': 'A'}
-        for key, fraction in [('laser',.18),('next',.29),('back',.40),('pen',.51),('mic',.62),('translate',.73)]:
-            y = h*fraction+5
-            left = key in ('laser','back','mic')
-            chosen = key == self.active
-            color = QColor('#77adff' if chosen else '#4c5868')
-            p.setPen(QPen(color, 1.7 if chosen else 1))
-            p.drawLine(QPointF(center+(-28 if left else 28), y), QPointF(178 if left else w-178, y))
-            p.setBrush(QColor('#243d5c' if chosen else '#151a21'))
-            p.drawEllipse(QPointF(center,y),25,25)
-            p.setPen(QColor('#b4d3ff' if chosen else '#d0d6df'))
-            p.setFont(QFont('DejaVu Sans',16))
-            p.drawText(QRectF(center-25,y-25,50,50),Qt.AlignCenter,glyphs[key])
-        p.setPen(QColor('#a2aab7'))
-        p.setFont(QFont('DejaVu Sans',9))
-        p.drawText(QRectF(center-50,body.bottom()-44,100,22),Qt.AlignCenter,'BASEUS')
-        p.end()
+        if self.stack.currentWidget()==self.fallback:self._resize_preview()
 
 
 class EffectCanvas(QWidget):

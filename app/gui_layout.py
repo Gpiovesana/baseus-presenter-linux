@@ -97,7 +97,7 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: trans
 
     root,main,details=page(tr('Conheça seu passador'),tr('Selecione um botão para ver como ele funciona.'),tr('Laser digital'),tr('Segure para apontar'))
     device=Device();main.addWidget(device,1)
-    main.addWidget(text(tr('Ilustração esquemática · Funções atuais, sem remapeamento de botões.'),'muted'))
+    main.addWidget(text(tr('Modelo 3D interativo · Selecione uma função abaixo para destacá-la no passador.'),'muted'))
     action1=text('', 'section');desc1=text('');action2=text('', 'section');desc2=text('')
     for item in (action1,desc1,action2,desc2):details.addWidget(item)
     details.addWidget(button(tr('Ajustar ponteiro e efeitos'),lambda:show_page(1)));details.addStretch()

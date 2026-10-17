@@ -35,6 +35,8 @@ conexão/desconexão de monitores ainda precisam de validação completa.
 
 ## ✨ Funcionalidades
 
+* **Visualização 3D interativa do passador:** gire livremente, use a roda para zoom e clique em um dos 11 controles para selecionar sua explicação. Inclui suporte por teclado e imagem estática quando o OpenGL não está disponível. O botão de mouse controla os efeitos digitais; o botão laranja corresponde ao laser físico.
+
 * **Ferramentas Visuais de Apresentação:**
   * **Laser Digital:** Um ponto virtual personalizável (cor e tamanho) na tela.
   * **Lupa (Magnifier):** Amplie áreas específicas da tela (formato circular ou retangular).
@@ -91,7 +93,8 @@ durante a atualização; a escolha estará disponível nas próximas atualizaç�
 
 Abra **Configurações → Desinstalar Baseus Presenter…**, ou procure
 **Desinstalar Baseus Presenter** no menu de aplicativos. O terminal primeiro
-mostra um aviso: é necessário digitar `DESINSTALAR` para continuar. Enter ou
+mostra um aviso: é necessário digitar `DESINSTALAR` (interface em português) ou `UNINSTALL`
+(interface em inglês) para continuar. Enter ou
 fechar o terminal cancela. A senha administrativa é solicitada somente para
 remover a regra USB. A confirmação aceita maiúsculas, minúsculas ou letras misturadas.
 
@@ -101,6 +104,8 @@ estiver disponível. Novas instalações incluem o Zenity, usado para essa janel
 
 O aplicativo é encerrado antes da remoção. A pasta de instalação inteira,
 o ambiente virtual, os atalhos e a inicialização automática são removidos.
+A extensão GNOME do Baseus é desabilitada e removida junto com seus backups.
+Outras extensões são preservadas.
 Configurações, modelos e transcrições fora da pasta de instalação são preservados;
 arquivos pessoais dentro dela também serão apagados. A remoção não usa a lixeira.
 
@@ -184,6 +189,8 @@ this extension. Slide navigation remains available. Mixed scaling and monitor
 hotplug still require full validation.
 
 ## ✨ Features
+
+* **Interactive 3D presenter view:** rotate freely, scroll to zoom, and click any of the 11 controls to select its explanation. Keyboard controls and a static image fallback are included. The mouse button controls the digital effects; the orange button is the physical laser.
 * **Visual Presentation Tools:**
 
   * Digital Laser: A customizable virtual pointer (color and size) on the screen.
@@ -254,7 +261,8 @@ choice becomes available for subsequent updates.
 Open **Configurações → Desinstalar Baseus Presenter…** (Settings
 → Uninstall Baseus Presenter), or search for **Desinstalar Baseus Presenter** in
 your applications menu. Interface labels follow the selected language.
-The terminal first displays a warning: you must type `DESINSTALAR` to continue.
+The terminal first displays a warning: you must type `UNINSTALL`
+(English interface) or `DESINSTALAR` (Portuguese interface) to continue.
 Pressing Enter or closing the terminal cancels. Your administrator password is
 requested only to remove the USB permission rule. Confirmation is case-insensitive.
 
@@ -263,7 +271,9 @@ and the result also appear in the terminal, including when the progress window
 is unavailable. New installations include Zenity, which provides this window.
 
 The application exits before removal. The entire installation folder, virtual
-environment, shortcuts, and autostart entry are removed. Settings, models, and
+environment, shortcuts, and autostart entry are removed. The Baseus GNOME
+extension is disabled and removed along with its backups. Other extensions
+are preserved. Settings, models, and
 transcripts outside the installation folder are preserved; personal files inside
 it are also deleted.
 

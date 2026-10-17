@@ -123,3 +123,20 @@ class TestAutomaticPreparation(unittest.TestCase):
                 warning = prepare_wayland_extension()
                 self.assertIn('preparar', warning)
                 self.assertEqual((destination / 'metadata.json').read_text(), metadata)
+
+    def test_reload_warning_and_internal_errors_are_translated(self):
+        from app import i18n
+        from app.gnome_extension import prepare_wayland_extension
+        with mock.patch.object(i18n, '_translator', None), \
+                mock.patch.object(i18n, '_language', 'en'):
+            self.assertIn('log out and back in', prepare_wayland_extension())
+            original = self.run.side_effect
+            def unavailable_shell(args, **kwargs):
+                result = original(args, **kwargs)
+                if args[0] == 'gdbus':
+                    result.returncode = 1
+                return result
+            self.run.side_effect = unavailable_shell
+            warning = prepare_wayland_extension()
+            self.assertIn('GNOME Shell is not available in this session', warning)
+            self.assertIn('Slide navigation remains available.', warning)

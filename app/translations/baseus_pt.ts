@@ -201,10 +201,6 @@ Deseja fechar o aplicativo e atualizar agora?</translation>
       <translation>Desinstalação bloqueada em checkout de desenvolvimento.</translation>
     </message>
     <message>
-      <source>Digite desinstalar para confirmar (maiúsculas ou minúsculas; Enter cancela): </source>
-      <translation>Digite desinstalar para confirmar (maiúsculas ou minúsculas; Enter cancela): </translation>
-    </message>
-    <message>
       <source>Diretório de desinstalação inseguro.</source>
       <translation>Diretório de desinstalação inseguro.</translation>
     </message>
@@ -285,10 +281,6 @@ Deseja fechar o aplicativo e atualizar agora?</translation>
     <message>
       <source>Idioma instalado!</source>
       <translation>Idioma instalado!</translation>
-    </message>
-    <message>
-      <source>Inclui aplicativo, ambiente virtual, atalhos e regra USB.</source>
-      <translation>Inclui aplicativo, ambiente virtual, atalhos e regra USB.</translation>
     </message>
     <message>
       <source>Inglês (Argos não detectado)</source>
@@ -991,6 +983,262 @@ Deseja baixar? (Aprox. 30MB)</translation>
     <message>
       <source>Quadrada</source>
       <translation>Quadrada</translation>
+    </message>
+    <message>
+      <source>--- Transcrição Iniciada: {0} ---
+
+</source>
+      <translation>--- Transcrição Iniciada: {0} ---
+
+</translation>
+    </message>
+    <message>
+      <source>Aula_{0}</source>
+      <translation>Aula_{0}</translation>
+    </message>
+    <message>
+      <source>Backup: {0}</source>
+      <translation>Backup: {0}</translation>
+    </message>
+    <message>
+      <source>Depois: {0}</source>
+      <translation>Depois: {0}</translation>
+    </message>
+    <message>
+      <source>Destino da extensão não pode ser link simbólico</source>
+      <translation>Destino da extensão não pode ser link simbólico</translation>
+    </message>
+    <message>
+      <source>Digite {0} para confirmar (maiúsculas ou minúsculas; Enter cancela): </source>
+      <translation>Digite {0} para confirmar (maiúsculas ou minúsculas; Enter cancela): </translation>
+    </message>
+    <message>
+      <source>Esta extensão requer GNOME 46. A navegação de slides continua disponível.</source>
+      <translation>Esta extensão requer GNOME 46. A navegação de slides continua disponível.</translation>
+    </message>
+    <message>
+      <source>Extensão Baseus preparada. Salve seu trabalho, saia e entre na sessão e abra o Baseus novamente para carregar os efeitos atualizados. A navegação de slides continua disponível.</source>
+      <translation>Extensão Baseus preparada. Salve seu trabalho, saia e entre na sessão e abra o Baseus novamente para carregar os efeitos atualizados. A navegação de slides continua disponível.</translation>
+    </message>
+    <message>
+      <source>Extensão instalada em {0}</source>
+      <translation>Extensão instalada em {0}</translation>
+    </message>
+    <message>
+      <source>GNOME Shell não está disponível nesta sessão</source>
+      <translation>GNOME Shell não está disponível nesta sessão</translation>
+    </message>
+    <message>
+      <source>Identificação D-Bus inválida</source>
+      <translation>Identificação D-Bus inválida</translation>
+    </message>
+    <message>
+      <source>Identificação da sessão GNOME inválida</source>
+      <translation>Identificação da sessão GNOME inválida</translation>
+    </message>
+    <message>
+      <source>Lista de extensões inválida</source>
+      <translation>Lista de extensões inválida</translation>
+    </message>
+    <message>
+      <source>Metadados da extensão inválidos: {0}</source>
+      <translation>Metadados da extensão inválidos: {0}</translation>
+    </message>
+    <message>
+      <source>Não foi ativada. Se nova ou atualizada, salve seu trabalho e faça logout/login.</source>
+      <translation>Não foi ativada. Se nova ou atualizada, salve seu trabalho e faça logout/login.</translation>
+    </message>
+    <message>
+      <source>Não foi possível consultar as extensões habilitadas</source>
+      <translation>Não foi possível consultar as extensões habilitadas</translation>
+    </message>
+    <message>
+      <source>Não foi possível habilitar a extensão</source>
+      <translation>Não foi possível habilitar a extensão</translation>
+    </message>
+    <message>
+      <source>Não foi possível identificar a sessão D-Bus</source>
+      <translation>Não foi possível identificar a sessão D-Bus</translation>
+    </message>
+    <message>
+      <source>Não foi possível preparar a extensão GNOME: {0}. A navegação de slides continua disponível.</source>
+      <translation>Não foi possível preparar a extensão GNOME: {0}. A navegação de slides continua disponível.</translation>
+    </message>
+    <message>
+      <source>Os efeitos Wayland requerem GNOME 46. A navegação de slides continua disponível.</source>
+      <translation>Os efeitos Wayland requerem GNOME 46. A navegação de slides continua disponível.</translation>
+    </message>
+    <message>
+      <source>[GRAVANDO]</source>
+      <translation>[GRAVANDO]</translation>
+    </message>
+    <message>
+      <source>[PAUSADO]</source>
+      <translation>[PAUSADO]</translation>
+    </message>
+    <message>
+      <source>[TRADUÇÃO OFF]</source>
+      <translation>[TRADUÇÃO OFF]</translation>
+    </message>
+    <message>
+      <source>[TRADUÇÃO ON]</source>
+      <translation>[TRADUÇÃO ON]</translation>
+    </message>
+    <message>
+      <source>desinstalar</source>
+      <translation>desinstalar</translation>
+    </message>
+    <message>
+      <source>A pasta não pertence à extensão Baseus: {0}</source>
+      <translation>A pasta não pertence à extensão Baseus: {0}</translation>
+    </message>
+    <message>
+      <source>Caminho da extensão GNOME não pode ser link simbólico: {0}</source>
+      <translation>Caminho da extensão GNOME não pode ser link simbólico: {0}</translation>
+    </message>
+    <message>
+      <source>Inclui aplicativo, ambiente virtual, atalhos, regra USB, extensão GNOME do Baseus e seus backups.</source>
+      <translation>Inclui aplicativo, ambiente virtual, atalhos, regra USB, extensão GNOME do Baseus e seus backups.</translation>
+    </message>
+    <message>
+      <source>Não foi possível confirmar a desativação da extensão Baseus.</source>
+      <translation>Não foi possível confirmar a desativação da extensão Baseus.</translation>
+    </message>
+    <message>
+      <source>Pasta da extensão GNOME insegura: {0}</source>
+      <translation>Pasta da extensão GNOME insegura: {0}</translation>
+    </message>
+    <message>
+      <source>Removendo a extensão GNOME do Baseus e seus backups…</source>
+      <translation>Removendo a extensão GNOME do Baseus e seus backups…</translation>
+    </message>
+    <message>
+      <source>Arraste para girar · Roda para zoom · Setas e +/− no teclado</source>
+      <translation>Arraste para girar · Roda para zoom · Setas e +/− no teclado</translation>
+    </message>
+    <message>
+      <source>Modelo 3D do passador</source>
+      <translation>Modelo 3D do passador</translation>
+    </message>
+    <message>
+      <source>Modelo 3D interativo · Selecione uma função abaixo para destacá-la no passador.</source>
+      <translation>Modelo 3D interativo · Selecione uma função abaixo para destacá-la no passador.</translation>
+    </message>
+    <message>
+      <source>Restaurar vista</source>
+      <translation>Restaurar vista</translation>
+    </message>
+    <message>
+      <source>Visualização 3D indisponível. Use os botões abaixo para conhecer os controles.</source>
+      <translation>Visualização 3D indisponível. Use os botões abaixo para conhecer os controles.</translation>
+    </message>
+    <message>
+      <source>A chave controla a alimentação do dispositivo.</source>
+      <translation>A chave controla a alimentação do dispositivo.</translation>
+    </message>
+    <message>
+      <source>APONTADOR FÍSICO</source>
+      <translation>APONTADOR FÍSICO</translation>
+    </message>
+    <message>
+      <source>Abre a visão de múltiplas janelas.</source>
+      <translation>Abre a visão de múltiplas janelas.</translation>
+    </message>
+    <message>
+      <source>Aciona o laser emitido pelo próprio passador.</source>
+      <translation>Aciona o laser emitido pelo próprio passador.</translation>
+    </message>
+    <message>
+      <source>Aumenta o volume usando o comando nativo do passador.</source>
+      <translation>Aumenta o volume usando o comando nativo do passador.</translation>
+    </message>
+    <message>
+      <source>Botão com símbolo de mouse</source>
+      <translation>Botão com símbolo de mouse</translation>
+    </message>
+    <message>
+      <source>Botão laranja do passador</source>
+      <translation>Botão laranja do passador</translation>
+    </message>
+    <message>
+      <source>Botão lateral de aumentar volume</source>
+      <translation>Botão lateral de aumentar volume</translation>
+    </message>
+    <message>
+      <source>Botão lateral de diminuir volume</source>
+      <translation>Botão lateral de diminuir volume</translation>
+    </message>
+    <message>
+      <source>Botão pequeno ao lado de Voltar</source>
+      <translation>Botão pequeno ao lado de Voltar</translation>
+    </message>
+    <message>
+      <source>CLIQUE / DUPLO CLIQUE</source>
+      <translation>CLIQUE / DUPLO CLIQUE</translation>
+    </message>
+    <message>
+      <source>Chave ON/OFF na lateral</source>
+      <translation>Chave ON/OFF na lateral</translation>
+    </message>
+    <message>
+      <source>Clique em um botão do modelo para selecioná-lo · Arraste para girar · Roda para zoom</source>
+      <translation>Clique em um botão do modelo para selecioná-lo · Arraste para girar · Roda para zoom</translation>
+    </message>
+    <message>
+      <source>DESLIZAR</source>
+      <translation>DESLIZAR</translation>
+    </message>
+    <message>
+      <source>Diminui o volume usando o comando nativo do passador.</source>
+      <translation>Diminui o volume usando o comando nativo do passador.</translation>
+    </message>
+    <message>
+      <source>Esse controle funciona diretamente no dispositivo.</source>
+      <translation>Esse controle funciona diretamente no dispositivo.</translation>
+    </message>
+    <message>
+      <source>HARDWARE</source>
+      <translation>HARDWARE</translation>
+    </message>
+    <message>
+      <source>Laser físico</source>
+      <translation>Laser físico</translation>
+    </message>
+    <message>
+      <source>Liga ou desliga o passador.</source>
+      <translation>Liga ou desliga o passador.</translation>
+    </message>
+    <message>
+      <source>Ligar / desligar</source>
+      <translation>Ligar / desligar</translation>
+    </message>
+    <message>
+      <source>Links e janelas</source>
+      <translation>Links e janelas</translation>
+    </message>
+    <message>
+      <source>Mouse e efeitos digitais</source>
+      <translation>Mouse e efeitos digitais</translation>
+    </message>
+    <message>
+      <source>O ajuste é feito pelo controle de volume do sistema.</source>
+      <translation>O ajuste é feito pelo controle de volume do sistema.</translation>
+    </message>
+    <message>
+      <source>SISTEMA</source>
+      <translation>SISTEMA</translation>
+    </message>
+    <message>
+      <source>Um clique abre o hyperlink selecionado; dois cliques navegam entre hyperlinks.</source>
+      <translation>Um clique abre o hyperlink selecionado; dois cliques navegam entre hyperlinks.</translation>
+    </message>
+    <message>
+      <source>Volume +</source>
+      <translation>Volume +</translation>
+    </message>
+    <message>
+      <source>Volume −</source>
+      <translation>Volume −</translation>
     </message>
   </context>
 </TS>

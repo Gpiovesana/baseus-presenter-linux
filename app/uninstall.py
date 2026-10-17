@@ -1,5 +1,7 @@
 """Desinstalador independente da GUI e da venv, com confirmação obrigatória."""
 import argparse
+import ast
+import json
 import fcntl
 import os
 from pathlib import Path
@@ -13,6 +15,8 @@ if __package__:
     from .i18n import tr, configure_standalone
 else:
     from i18n import tr, configure_standalone
+
+GNOME_EXTENSION_UUID = "baseus-presenter@baseus.local"
 
 UDEV_RULE = Path("/etc/udev/rules.d/99-baseus-presenter.rules")
 
@@ -171,6 +175,49 @@ class UninstallProgress:
                     self.process.wait()
 
 
+
+def remove_gnome_extension(data):
+    shell = data / "gnome-shell"
+    extension = shell / "extensions" / GNOME_EXTENSION_UUID
+    backups = shell / "baseus-extension-backups"
+    for parent in (shell, extension.parent, backups):
+        if parent.is_symlink():
+            raise ValueError(tr('Caminho da extensão GNOME não pode ser link simbólico: {0}', parent))
+    paths = [extension] if extension.exists() or extension.is_symlink() else []
+    paths.extend(sorted(backups.glob(GNOME_EXTENSION_UUID + ".bak-*")))
+    if not paths:
+        return
+    for path in paths:
+        metadata = path / "metadata.json"
+        if (path.is_symlink() or not path.is_dir() or path.stat().st_uid != os.getuid()
+                or metadata.is_symlink()):
+            raise ValueError(tr('Pasta da extensão GNOME insegura: {0}', path))
+        contents = json.loads(metadata.read_text(encoding="utf-8"))
+        if not isinstance(contents, dict) or contents.get("uuid") != GNOME_EXTENSION_UUID:
+            raise ValueError(tr('A pasta não pertence à extensão Baseus: {0}', path))
+
+    command = ["gsettings", "get", "org.gnome.shell", "enabled-extensions"]
+    def read_enabled():
+        result = subprocess.run(command, check=True, capture_output=True, text=True, timeout=5)
+        try:
+            enabled = ast.literal_eval(result.stdout.strip().removeprefix("@as "))
+        except (ValueError, SyntaxError) as error:
+            raise ValueError(tr('Lista de extensões inválida')) from error
+        if not isinstance(enabled, list) or not all(isinstance(item, str) for item in enabled):
+            raise ValueError(tr('Lista de extensões inválida'))
+        return enabled
+
+    enabled = read_enabled()
+    if GNOME_EXTENSION_UUID in enabled:
+        remaining = [item for item in enabled if item != GNOME_EXTENSION_UUID]
+        subprocess.run(["gsettings", "set", "org.gnome.shell", "enabled-extensions",
+                        repr(remaining)], check=True, capture_output=True, text=True, timeout=5)
+        # gsettings can exit successfully even when dconf could not save the change.
+        if read_enabled() != remaining:
+            raise RuntimeError(tr('Não foi possível confirmar a desativação da extensão Baseus.'))
+    for path in paths:
+        shutil.rmtree(path)
+
 def remove_installation(directory, progress=None):
     report = progress or (lambda message: print(message, flush=True))
     report(tr('Verificando a instalação…'))
@@ -192,7 +239,11 @@ def remove_installation(directory, progress=None):
             subprocess.run(["sudo", "rm", "--", str(rule)], check=True)
             subprocess.run(["sudo", "udevadm", "control", "--reload-rules"], check=True)
             subprocess.run(["sudo", "udevadm", "trigger"], check=True)
-        data = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+        data = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
+        if not data.is_absolute():
+            data = Path.home() / ".local/share"
+        report(tr('Removendo a extensão GNOME do Baseus e seus backups…'))
+        remove_gnome_extension(data)
         config = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
         validate_installation(target)
         os.chdir(target.parent)
@@ -215,13 +266,14 @@ def main(argv=None):
         return 0
     print(tr('AVISO — DESINSTALAR BASEUS PRESENTER\n'))
     print(tr('Será removida a pasta inteira: {0}', args.directory))
-    print(tr('Inclui aplicativo, ambiente virtual, atalhos e regra USB.'))
+    print(tr('Inclui aplicativo, ambiente virtual, atalhos, regra USB, extensão GNOME do Baseus e seus backups.'))
     print(tr('Configurações, modelos e transcrições FORA dessa pasta serão preservados.'))
     print(tr('Arquivos pessoais guardados DENTRO dela também serão apagados.\n'))
     try:
         validate_installation(args.directory)
-        answer = input(tr('Digite desinstalar para confirmar (maiúsculas ou minúsculas; Enter cancela): '))
-        if answer.strip().lower() != "desinstalar":
+        confirmation = tr('desinstalar')
+        answer = input(tr('Digite {0} para confirmar (maiúsculas ou minúsculas; Enter cancela): ', confirmation))
+        if answer.strip().casefold() != confirmation.casefold():
             print(tr('Cancelado. Nenhum arquivo foi removido.'))
             return 0
         progress = UninstallProgress()
@@ -235,7 +287,7 @@ def main(argv=None):
     except (EOFError, KeyboardInterrupt):
         print(tr('\nOperação interrompida.'))
         return 1
-    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         print(tr('\nNão foi possível concluir a desinstalação: {0}', error))
         print(tr('Se a remoção já começou, alguns itens podem ter sido removidos.'))
         result = 1

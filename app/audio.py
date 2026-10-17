@@ -163,12 +163,13 @@ class AudioThread(QThread):
             pasta = self.config.get("save_dir", os.path.expanduser("~"))
             try:
                 os.makedirs(pasta, exist_ok=True)
-                prefix = datetime.datetime.now().strftime("Aula_%Y-%m-%d_%H-%M-%S_")
+                prefix = tr('Aula_{0}', datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S_'))
                 with tempfile.NamedTemporaryFile(
                         mode='w', encoding='utf-8', prefix=prefix, suffix='.txt',
                         dir=pasta, delete=False) as f:
                     txt_path = f.name
-                    f.write(f"--- Transcrição Iniciada: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')} ---\n\n")
+                    f.write(tr('--- Transcrição Iniciada: {0} ---\n\n',
+                               datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')))
             except OSError as exc:
                 # Pasta sem permissao / disco cheio: avisa em vez de deixar
                 # o estado "ativo" sem nenhum arquivo de saida por baixo.

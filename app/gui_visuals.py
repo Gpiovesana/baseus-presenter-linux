@@ -48,13 +48,18 @@ class Device(QWidget):
         for index,(key,info) in enumerate(control_descriptions().items()):
             button=QPushButton(info[0]);button.setCheckable(True)
             button.setAccessibleName(info[0]);button.setToolTip(info[1])
-            button.clicked.connect(lambda _checked,key=key:self.selected.emit(key))
+            button.clicked.connect(lambda _checked,key=key:self._select_from_menu(key))
             controls.addWidget(button,index//4,index%4);self.buttons[key]=button
         if QGuiApplication.platformName() in ('offscreen','minimal'):
             self.show_fallback()
 
-    def select(self,key):
-        if key!=self.active:self.view.orient_for_control(key)
+    def _select_from_menu(self,key):
+        self.select(key,focus=True)
+        self.selected.emit(key)
+
+    def select(self,key,focus=False):
+        if focus:self.view.focus_control(key)
+        elif key!=self.active:self.view.orient_for_control(key)
         self.active=key;self.view.active=key
         for name,button in self.buttons.items():button.setChecked(name==key)
         self.view.update()

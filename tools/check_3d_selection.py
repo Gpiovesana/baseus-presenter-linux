@@ -17,12 +17,12 @@ case.setUp()
 try:
     win=case.make_window();win.setWindowTitle('Baseus — teste de seleção 3D');win.show();QTest.qWait(900)
     device=win.findChild(Device);view=device.view;assert view.isValid() and not view.error
-    names={'physical_laser':'Botão central','laser':'Botão mouse','next':'Botão avançar','back':'Botão Voltar','screen':'Botão Tela','pen':'Lateral Caneta','mic':'Lateral Microfone','translate':'Lateral Tradução','volume_up':'Lateral Volume mais','volume_down':'Lateral Volume menos','power':'Chave ON OFF'}
+    names={'physical_laser':'Botão central','laser':'Botão mouse','next':'Botão avançar','back':'Botão Voltar','screen':'Botão Tela','pen':'Lateral Caneta','mic':'Lateral Tradução','translate':'Lateral Microfone','volume_up':'Lateral Volume mais','volume_down':'Lateral Volume menos','power':'Chave ON OFF'}
     def point_for(mesh):
         coords=list(struct.iter_unpack('<3f',mesh.positions))
         center=QVector3D(*[(min(v[i] for v in coords)+max(v[i] for v in coords))/2 for i in range(3)])
         proj=QMatrix4x4();proj.perspective(38,view.width()/view.height(),.01,2)
-        camera=QMatrix4x4();camera.translate(0,0,-view.distance);camera.rotate(view.rotation)
+        camera=view._camera_matrix()
         ndc=(proj*camera*mesh.transform).map(center)
         return QPoint(round((ndc.x()+1)*view.width()/2),round((1-ndc.y())*view.height()/2))
     for key,name in names.items():

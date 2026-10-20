@@ -6,7 +6,7 @@ import math
 from pathlib import Path
 import struct
 
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, QPointF, QVariantAnimation, QEasingCurve, pyqtSignal
 from PyQt5.QtGui import (QMatrix4x4, QOpenGLBuffer, QOpenGLFramebufferObject, QOpenGLFramebufferObjectFormat, QOpenGLShader,
                          QOpenGLShaderProgram, QOpenGLVersionProfile, QQuaternion,
                          QSurfaceFormat, QVector3D)
@@ -101,13 +101,21 @@ CONTROL_PREFIXES=(
     ('Botão avançar','next'),('Rebaixo avançar','next'),('Seta para','next'),
     ('Botão Voltar','back'),('Ícone voltar','back'),('Botão Tela','screen'),('Ícone tela','screen'),
     ('Lateral Caneta','pen'),('Pincel lateral','pen'),
-    ('Lateral Microfone','mic'),('Microfone','mic'),
-    ('Lateral Tradução','translate'),('Tradução','translate'),
+    # Button mesh names are inverted; glyph positions in the GLB are corrected.
+    ('Lateral Microfone','translate'),('Microfone','mic'),
+    ('Lateral Tradução','mic'),('Tradução','translate'),
     ('Lateral Volume mais','volume_up'),('Volume mais','volume_up'),
     ('Lateral Volume menos','volume_down'),('Volume menos','volume_down'),
     ('Chave ON OFF','power'),('Trilho ON OFF','power'),('Indicador laranja ON OFF','power'),('Alimentação ','power'),
 )
 PICK_KEYS=tuple(dict.fromkeys(key for _,key in CONTROL_PREFIXES))
+FOCUS_MESHES={
+    'laser':'Botão mouse','physical_laser':'Botão central',
+    'next':'Botão avançar','back':'Botão Voltar','screen':'Botão Tela',
+    'pen':'Lateral Caneta','mic':'Lateral Tradução','translate':'Lateral Microfone',
+    'volume_up':'Lateral Volume mais','volume_down':'Lateral Volume menos',
+    'power':'Chave ON OFF',
+}
 
 
 def control_for_mesh(name):
@@ -155,28 +163,103 @@ class ModelView(QOpenGLWidget):
         self.setAccessibleName(tr('Modelo 3D do passador'))
         self.active='laser';self.buffers=[];self.program=None;self.functions=None
         self.error=False;self._position=None;self._press_position=None;self._dragged=False;self._checked=False
+        self._focus_start=None
+        self._focus_animation=QVariantAnimation(self)
+        self._focus_animation.setDuration(280)
+        self._focus_animation.setEasingCurve(QEasingCurve.InOutCubic)
+        self._focus_animation.setStartValue(0.0)
+        self._focus_animation.setEndValue(1.0)
+        self._focus_animation.valueChanged.connect(self._animate_focus)
         self.reset_view()
 
     def reset_view(self):
+        self._focus_animation.stop()
         self.rotation=QQuaternion.fromEulerAngles(72,-18,-12)
-        self.distance=.24;self.update()
+        self.distance=.24;self.camera_offset=QPointF();self.update()
 
-    def orient_for_control(self,key):
+    @staticmethod
+    def _control_rotation(key):
         angles=((78,-70,-10) if key in ('pen','mic','translate','volume_up','volume_down') else
                 (78,70,10) if key=='power' else (72,-18,-12))
-        self.rotation=QQuaternion.fromEulerAngles(*angles);self.update()
+        return QQuaternion.fromEulerAngles(*angles)
+
+    def orient_for_control(self,key):
+        self._focus_animation.stop()
+        self.rotation=self._control_rotation(key);self.update()
+
+    @staticmethod
+    @lru_cache(maxsize=11)
+    def _control_center(key):
+        mesh=next(m for m in load_model(MODEL_PATH) if m.name==FOCUS_MESHES[key])
+        vertices=list(struct.iter_unpack('<3f',mesh.positions))
+        center=QVector3D(*[(min(v[i] for v in vertices)+max(v[i] for v in vertices))/2
+                          for i in range(3)])
+        return mesh.transform.map(center)
+
+    def focus_control(self,key):
+        if self.error:return
+        self._focus_animation.stop()
+        target_rotation=self._control_rotation(key)
+        center=target_rotation.rotatedVector(self._control_center(key))
+        self._focus_start=(QQuaternion(self.rotation),self.distance,QPointF(self.camera_offset))
+        self._focus_target=(target_rotation,max(.11,min(.65,.18+center.z())),
+                            QPointF(-center.x(),-center.y()))
+        self._focus_animation.start()
+
+    def _animate_focus(self,progress):
+        if self._focus_start is None:return
+        rotation,distance,offset=self._focus_start
+        target_rotation,target_distance,target_offset=self._focus_target
+        self.rotation=QQuaternion.slerp(rotation,target_rotation,progress)
+        self.distance=distance+(target_distance-distance)*progress
+        self.camera_offset=offset+(target_offset-offset)*progress
+        self.update()
+
+    def _trackball_point(self,point):
+        radius=max(1,min(self.width(),self.height())/2)
+        x=(point.x()-self.width()/2)/radius
+        y=(self.height()/2-point.y())/radius
+        squared=x*x+y*y
+        # Sphere in the centre, smooth hyperbolic continuation outside it.
+        z=math.sqrt(1-squared) if squared<=.5 else .5/math.sqrt(squared)
+        return QVector3D(x,y,z).normalized()
+
+    def _rotate_trackball(self,start,end):
+        self._focus_animation.stop()
+        turn=QQuaternion.rotationTo(self._trackball_point(start),self._trackball_point(end))
+        self.rotation=(turn*self.rotation).normalized();self.update()
 
     def rotate(self,dx,dy):
+        self._focus_animation.stop()
         yaw=QQuaternion.fromAxisAndAngle(0,1,0,dx*.6)
         pitch=QQuaternion.fromAxisAndAngle(1,0,0,dy*.6)
         self.rotation=(yaw*pitch*self.rotation).normalized();self.update()
 
-    def zoom(self,steps):
-        self.distance=max(.11,min(.65,self.distance*math.exp(max(-10,min(10,-steps*.12)))))
+    def _camera_matrix(self):
+        view=QMatrix4x4()
+        view.translate(self.camera_offset.x(),self.camera_offset.y(),-self.distance)
+        view.rotate(self.rotation)
+        return view
+
+    def zoom(self,steps,point=None):
+        self._focus_animation.stop()
+        distance=max(.11,min(.65,self.distance*math.exp(max(-10,min(10,-steps*.12)))))
+        delta=distance-self.distance
+        if not delta:return
+        if point is not None:
+            point=QPointF(point)
+            # Move the camera along the ray through the mouse. Every point
+            # on that ray stays at the same pixel, at any model depth.
+            tangent=math.tan(math.radians(19))
+            x=(2*point.x()/max(1,self.width())-1)*tangent*self.width()/max(1,self.height())
+            y=(1-2*point.y()/max(1,self.height()))*tangent
+            self.camera_offset+=QPointF(x*delta,y*delta)
+        self.distance=distance
         self.update()
 
     def mousePressEvent(self,event):
         if event.button()==Qt.LeftButton:
+            self._focus_animation.stop()
             self._position=event.pos();self._press_position=event.pos();self._dragged=False
             self.setFocus();self.setCursor(Qt.ClosedHandCursor)
 
@@ -185,8 +268,8 @@ class ModelView(QOpenGLWidget):
             if not self._dragged:
                 if (event.pos()-self._press_position).manhattanLength()<QApplication.startDragDistance():return
                 self._dragged=True
-            delta=event.pos()-self._position;self._position=event.pos()
-            self.rotate(delta.x(),delta.y())
+            self._rotate_trackball(self._position,event.pos())
+            self._position=event.pos()
 
     def mouseDoubleClickEvent(self,event):
         if event.button()==Qt.LeftButton:self.reset_view()
@@ -222,7 +305,7 @@ class ModelView(QOpenGLWidget):
             self.doneCurrent();self.update()
 
     def wheelEvent(self,event):
-        self.zoom(event.angleDelta().y()/120);event.accept()
+        self.zoom(event.angleDelta().y()/120,event.posF());event.accept()
 
     def keyPressEvent(self,event):
         key=event.key()
@@ -276,7 +359,7 @@ class ModelView(QOpenGLWidget):
         f.glClearColor(0,0,0,1) if picking else f.glClearColor(.055,.065,.085,1)
         f.glClear(0x4000|0x0100);f.glEnable(0x0B71)
         projection=QMatrix4x4();projection.perspective(38,self.width()/max(1,self.height()),.01,2)
-        view=QMatrix4x4();view.translate(0,0,-self.distance);view.rotate(self.rotation)
+        view=self._camera_matrix()
         self.program.bind();self.program.setUniformValue('picking',float(picking))
         for mesh,buffers in self.buffers:
             key=control_for_mesh(mesh.name)
